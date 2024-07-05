@@ -1,0 +1,52 @@
+{
+    "data" : [
+        {
+            "vals" : "/data/submit/srothman/EEC/Jun28_2024/DYJetsToLL_nodz/EECproj/hists_file0to8695_tight_manualcov___reco.npy",
+            "covs" : "/data/submit/srothman/EEC/Jun28_2024/DYJetsToLL_nodz/EECproj/hists_file0to8695_tight_manualcov___covreco.npy",
+            "isData": false,
+            "statsplit" : "none"
+        },
+        {
+            "vals" : "/data/submit/srothman/EEC/Jun28_2024/DYJetsToLL/EECproj/hists_file0to6276_tight_statsplit2_manualcov___reco.npy",
+            "covs" : "/data/submit/srothman/EEC/Jun28_2024/DYJetsToLL/EECproj/hists_file0to6276_tight_statsplit2_manualcov___covreco.npy", 
+            "isData": false,
+            "statsplit" : "sum"
+        }
+    ],
+    "commands" : [
+        {
+            "command" : "compare",
+            "wrt" : "dR",
+            "loopover" : ["pt"],
+            "labels" : [
+                "2nd order", 
+                "3rd order",
+                "4th order",
+                "5th order",
+                "6th order"
+            ],
+            "colors" : [
+                "red",
+                "blue",
+                "green",
+                "purple",
+                "orange"
+            ],
+            "fixes" : [
+                {"order" : 0},
+                {"order" : 1},
+                {"order" : 2},
+                {"order" : 3},
+                {"order" : 4}
+            ],
+            "which" : [0, 0, 0, 0, 0]
+        },
+        {
+            "command" : "correlation",
+            "wrt" : "dR",
+            "loopover" : ["btag", "pt"],
+            "fix1" : {"order" : 0},
+            "fix2" : {"order" : 1}
+        }
+    ]
+}

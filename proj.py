@@ -1,16 +1,17 @@
 import matplotlib.pyplot as plt
+import os.path
 import numpy as np
 import mplhep as hep
 from matplotlib.colors import Normalize, LogNorm
 
-from util import setup_ratiopad_canvas, setup_plain_canvas, get_ax_edges, project_projected, has_overflow, has_underflow, should_logx, should_logy, project_cov1x2_projected, setup_cbar_canvas, get_ax_label, bin_transfer_projected
+from util import setup_ratiopad_canvas, setup_plain_canvas, get_ax_edges, project_projected, has_overflow, has_underflow, should_logx, should_logy, project_cov1x2_projected, setup_cbar_canvas, get_ax_label, bin_transfer_projected, binning_string, binning_AND, savefig, binning_name
 from stats import getratio, maybe_density, maybe_density_cross
 
 def plotProjectedEECratio(val1, cov1,
                           val2, cov2,
                           cov1x2,
                           ax=None, isData=False,
-                          wrt='dR'):
+                          wrt='dR', color=None):
     if ax is None:
         fig, ax = setup_ratiopad_canvas(isData)
         ax.set_xlabel(get_ax_label(wrt))
@@ -25,7 +26,7 @@ def plotProjectedEECratio(val1, cov1,
 
     ax.errorbar(xcenters, ratio,
                 xerr = xerrs, yerr = yerrs,
-                fmt='o')
+                fmt='o', color=color)
 
     ax.axhline(1, color='black', linestyle='--')
 
@@ -34,6 +35,7 @@ def plotProjectedEEC(x, covx,
                      wrt='dR', binning={},
                      logwidth=True,
                      density=True,
+                     color = None,
                      label = None):
     if ax is None:
         fig, ax = setup_plain_canvas(isData)
@@ -86,64 +88,94 @@ def plotProjectedEEC(x, covx,
 
     ax.errorbar(xcenters, ys,
                 xerr=xerr, yerr=yerrs,
-                fmt='o', label=label)
+                fmt='o', label=label,
+                color=color)
 
     if label is not None:
         ax.legend()
 
     return vals, covs, N
  
-def compareProjectedEEC(x1, covx1, 
-               x2, covx2,
-               binning1 = {},
-               binning2 = {},
-               density1 = True,
-               density2 = True,
-               label1 = None,
-               label2 = None,
+def compareProjectedEEC(
+               x_l, covx_l, 
+               binning_l = [{}],
+               density = True,
+               label_l = None,
+               color_l = None,
                isData=False,
-               wrt='dR', logwidth=True):
+               wrt='dR', logwidth=True,
+               folder=None, fprefix=None):
+
     fig, (ax, rax) = setup_ratiopad_canvas(isData)
 
-    vals1, covs1, N1 = plotProjectedEEC(x1, covx1,
-                                    ax=ax, isData=isData,
-                                    wrt=wrt, binning=binning1,
-                                    logwidth=logwidth,
-                                    density=density1,
-                                    label=label1)
-    vals2, covs2, N2 = plotProjectedEEC(x2, covx2,
-                                    ax=ax, isData=isData,
-                                    wrt=wrt, binning=binning2,
-                                    logwidth=logwidth,
-                                    density=density2,
-                                    label=label2)
+    vals = []
+    covs = []
+    Ns = []
 
-    if x1 is x2:
-        cov1x2 = project_cov1x2_projected(covx1,
-                                          binning1, binning2, 
-                                          wrt)
-        if has_overflow(wrt):
-            cov1x2 = cov1x2[:-1,:-1]
-        if has_underflow(wrt):
-            cov1x2 = cov1x2[1:,1:]
+    for x, covx, binning, label, color in zip(x_l, covx_l, binning_l, label_l, color_l):
+        v, c, n = plotProjectedEEC(x, covx,
+                                   ax=ax, isData=isData,
+                                   wrt=wrt, binning=binning,
+                                   logwidth=logwidth,
+                                   density=density,
+                                   label=label,
+                                   color=color)
+        vals.append(v)
+        covs.append(c)
+        Ns.append(n)
 
-        cov1x2 = maybe_density_cross(vals1, vals2, 
-                                     density1, density2,
-                                     N1, N2,
-                                     cov1x2)
-    else:
-        cov1x2 = None
+    for ix2 in range(1, len(x_l)):
+        if x_l[ix2] is x_l[0]:
+            cov1x2 = project_cov1x2_projected(covx_l[0],
+                                              binning_l[ix2], 
+                                              binning_l[0],
+                                              wrt)
+            if has_overflow(wrt):
+                cov1x2 = cov1x2[:-1,:-1]
+            if has_underflow(wrt):
+                cov1x2 = cov1x2[1:,1:]
 
-    plotProjectedEECratio(vals1, covs1,
-                          vals2, covs2,
-                          cov1x2,
-                          ax=rax, isData=isData,
-                          wrt=wrt)
+            cov1x2 = maybe_density_cross(vals[ix2], vals[0],
+                                         density, density,
+                                         Ns[ix2], Ns[0],
+                                         cov1x2)
+        else:
+            cov1x2 = None
+
+        plotProjectedEECratio(vals[ix2], covs[ix2],
+                              vals[0], covs[0],
+                              cov1x2,
+                              ax=rax,
+                              isData=isData,
+                              wrt=wrt,
+                              color = color_l[ix2])
 
     rax.set_xlabel(get_ax_label(wrt))
     rax.set_ylabel('Ratio', loc='center')
 
-    plt.show()
+    labelstr = binning_string(binning_AND(binning_l))
+
+    ax.text(0.95, 0.05, labelstr, 
+            transform=ax.transAxes,
+            verticalalignment='bottom',
+            horizontalalignment='right',
+            fontsize=18,
+            weight='bold',
+            bbox=dict(facecolor='white', 
+                      boxstyle='square',
+                      linewidth=3,
+                      edgecolor='black'))
+
+    if folder is not None:
+        outname = os.path.join(folder, fprefix)
+    
+        binnedname = binning_name(binning_AND(binning_l))
+
+        outname += "_"+binnedname+".png"
+
+        savefig(outname)
+    else:
+        plt.show()
 
 def plotProjectedCorrelation(cov,
                              binning1={},

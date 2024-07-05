@@ -1,0 +1,70 @@
+{
+    "data" : [
+        {
+            "vals" : "/data/submit/srothman/EEC/Jun28_2024/unfold_closure/tPrPgP_P/forwarded.npy",
+            "covs" : "/data/submit/srothman/EEC/Jun28_2024/unfold_closure/tPrPgP_P/covforwarded.npy",
+            "isData": false,
+            "statsplit" : "none"
+        },
+        {
+            "vals" : "/data/submit/srothman/EEC/Jun28_2024/unfold_closure/tPrPgP_P/unfolded.npy",
+            "covs" : "/data/submit/srothman/EEC/Jun28_2024/unfold_closure/tPrPgP_P/covunfolded.npy",
+            "isData": false,
+            "statsplit" : "none"
+        },
+        {
+            "vals" : "/data/submit/srothman/EEC/Apr24_2024/DYJetsToLL/EECproj/hists_file0to1825_tight/reco.npy",
+            "covs" : "/data/submit/srothman/EEC/Apr24_2024/DYJetsToLL/EECproj/hists_file0to1825_tight/covreco.npy",
+            "isData": false,
+            "statsplit" : "none"
+        },
+        {
+            "vals" : "/data/submit/srothman/EEC/Apr24_2024/DYJetsToLL/EECproj/hists_file0to1825_tight/gen.npy",
+            "covs" : "/data/submit/srothman/EEC/Apr24_2024/DYJetsToLL/EECproj/hists_file0to1825_tight/covgen.npy",
+            "isData": false,
+            "statsplit" : "none"
+        }
+    ],
+    "commands" : [
+        {
+            "command" : "compare",
+            "wrt" : "dR",
+            "loopover" : ["pt", "order", "btag"],
+            "labels" : [
+                "Reco",
+                "Forward-folded"
+            ],
+            "colors" : [
+                "red",
+                "blue"
+            ],
+            "fixes" : [
+                {},
+                {}
+            ],
+            "which" : [2, 0],
+            "folder" : "/data/submit/srothman/EEC/Jun28_2024/unfold_closure/tPrPgP_P/plots",
+            "fprefix" : "forward_closure"
+        },
+        {
+            "command" : "compare",
+            "wrt" : "dR",
+            "loopover" : ["pt", "order", "btag"],
+            "labels" : [
+                "Gen",
+                "Unfolded"
+            ],
+            "colors" : [
+                "red",
+                "blue"
+            ],
+            "fixes" : [
+                {},
+                {}
+            ],
+            "which" : [3, 1],
+            "folder" : "/data/submit/srothman/EEC/Jun28_2024/unfold_closure/tPrPgP_P/plots",
+            "fprefix" : "unfold_closure"
+        }
+    ]
+}

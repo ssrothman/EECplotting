@@ -1,4 +1,6 @@
 import json
+import os
+import os.path
 import numpy as np
 import matplotlib.pyplot as plt
 import mplhep as hep
@@ -7,7 +9,7 @@ plt.style.use(hep.style.CMS)
 
 APPROVAL_TEXT = "Work in progress"
 
-with open("test/config.json", 'r') as f:
+with open("config.json", 'r') as f:
     config = json.load(f)
 
 def add_cms_label(ax, isData):
@@ -57,6 +59,84 @@ def should_logx(axname):
 def should_logy():
     return config['should_logy']
 
+def is_integer(axname):
+    return config['isinteger'][axname]
+
+def ax_in_all(binning_l, axname):
+    for binning in binning_l:
+        if axname not in binning:
+            return False
+    return True
+
+def ax_same_in_all(binning_l, axname):
+    for binning in binning_l:
+        if axname not in binning:
+            return False
+        if binning[axname] != binning_l[0][axname]:
+            return False
+    return True
+
+def ax_extent(axname):
+    ans = len(config['binedges'][axname]) - 1
+    if has_overflow(axname):
+        ans += 1
+    if has_underflow(axname):
+        ans += 1
+    return ans
+
+def binning_AND(binning_l):
+    ans = {}
+    for axname in config['projshape']:
+        if ax_same_in_all(binning_l, axname):
+            ans[axname] = binning_l[0][axname]
+
+    return ans
+
+def binning_name(binning):
+    ans = ''
+    for axname in binning.keys():
+        if type(binning[axname]) is int:
+            ans += '%s%d' % (axname, binning[axname])
+        elif type(binning[axname]) is slice:
+            ans += '%s%dto%d' % (axname, binning[axname].start, binning[axname].stop)
+        else:
+            raise ValueError("Unknown binning type")
+        ans += '_'
+    if ans[-1] == '_':
+        ans = ans[:-1]
+
+    return ans
+
+def binning_string(binning):
+    ans = ''
+    for axname in binning.keys():
+        if type(binning[axname]) is int:
+            theslice = slice(binning[axname], binning[axname]+1)
+        else:
+            theslice = binning[axname]
+        
+        edges = get_ax_edges(axname)
+        if has_underflow(axname):
+            edges = np.concatenate(([-np.inf], edges))
+        if has_overflow(axname):
+            edges = np.concatenate((edges, [np.inf]))
+
+        centers = (edges[1:] + edges[:-1])/2
+
+        if is_integer(axname):
+            ans += '%s$ = %d$' % (get_ax_label(axname), centers[theslice])
+        else:
+            ans += '$%g < $%s$ < %g$' % (edges[theslice.start], 
+                                               get_ax_label(axname), 
+                                               edges[theslice.stop])
+
+        ans += '\n'
+
+    if ans[-1] == '\n':
+        ans = ans[:-1]
+
+    return ans
+
 def project_projected(x, covx, binning, onto):
     '''
     x : np.array with the projected EEC
@@ -69,7 +149,10 @@ def project_projected(x, covx, binning, onto):
     sum_list = []
     for i, axname in enumerate(config['projshape']):
         if axname in binning:
-            slice_list += [binning[axname]]
+            if type(binning[axname]) is int:
+                slice_list += [slice(binning[axname], binning[axname]+1)]
+            else:
+                slice_list += [binning[axname]]
         else:
             slice_list += [slice(None)]
 
@@ -97,7 +180,10 @@ def project_cov1x2_projected(covx, binning1, binning2, onto):
 
     for i, axname in enumerate(config['projshape']):
         if axname in binning1:
-            slice_list += [binning1[axname]]
+            if type(binning1[axname]) is int:
+                slice_list += [slice(binning1[axname], binning1[axname]+1)]
+            else:
+                slice_list += [binning1[axname]]
         else:
             slice_list += [slice(None)]
 
@@ -106,7 +192,10 @@ def project_cov1x2_projected(covx, binning1, binning2, onto):
 
     for i, axname in enumerate(config['projshape']):
         if axname in binning2:
-            slice_list += [binning2[axname]]
+            if type(binning2[axname]) is int:
+                slice_list += [slice(binning2[axname], binning2[axname]+1)]
+            else:
+                slice_list += [binning2[axname]]
         else:
             slice_list += [slice(None)]
 
@@ -122,13 +211,19 @@ def bin_transfer_projected(transfer, binningGen, binningReco):
 
     for i,axname in enumerate(config['projshape']):
         if axname in binningReco:
-            slice_list += [binningReco[axname]]
+            if type(binningReco[axname]) is int:
+                slice_list += [slice(binningReco[axname], binningReco[axname]+1)]
+            else:
+                slice_list += [binningReco[axname]]
         else:
             slice_list += [slice(None)]
 
     for i,axname in enumerate(config['projshape']):
         if axname in binningGen:
-            slice_list += [binningGen[axname]]
+            if type(binningGen[axname]) is int:
+                slice_list += [slice(binningGen[axname], binningGen[axname]+1)]
+            else:
+                slice_list += [binningGen[axname]]
         else:
             slice_list += [slice(None)]
 
@@ -145,7 +240,10 @@ def bin_cov_projected(cov, binning):
 
     for i, axname in enumerate(config['projshape']):
         if axname in binning:
-            slice_list += [binning[axname]]
+            if type(binning[axname]) is int:
+                slice_list += [slice(binning[axname], binning[axname]+1)]
+            else:
+                slice_list += [binning[axname]]
         else:
             slice_list += [slice(None)]
 
@@ -153,3 +251,10 @@ def bin_cov_projected(cov, binning):
 
     size = np.prod(cov.shape[:len(config['projshape'])])
     return cov[slice_tuple].reshape((size, size))
+
+def savefig(outname):
+    print("Saving to", outname)
+    os.makedirs(os.path.dirname(outname), exist_ok=True)
+    plt.tight_layout()
+    plt.savefig(outname, dpi=300, format='png', bbox_inches='tight')
+    plt.close()
