@@ -4,7 +4,8 @@ import numpy as np
 import mplhep as hep
 from matplotlib.colors import Normalize, LogNorm
 
-from util import setup_ratiopad_canvas, setup_plain_canvas, get_ax_edges, project_projected, has_overflow, has_underflow, should_logx, should_logy, project_cov1x2_projected, setup_cbar_canvas, get_ax_label, bin_transfer_projected, binning_string, binning_AND, savefig, binning_name
+from util import setup_ratiopad_canvas, setup_plain_canvas, get_ax_edges, has_overflow, has_underflow, should_logx, should_logy, setup_cbar_canvas, get_ax_label, savefig
+from EECutil import binning_AND, binning_name, binning_string, project_projected, project_cov1x2_projected, bin_transfer_projected, bin_cov_projected, project_covprojected
 from stats import getratio, maybe_density, maybe_density_cross
 
 def plotProjectedEECratio(val1, cov1,
@@ -13,8 +14,8 @@ def plotProjectedEECratio(val1, cov1,
                           ax=None, isData=False,
                           wrt='dR', color=None):
     if ax is None:
-        fig, ax = setup_ratiopad_canvas(isData)
-        ax.set_xlabel(get_ax_label(wrt))
+        fig, ax = setup_plain_canvas(isData)
+        ax.set_xlabel(get_ax_label(wrt, 'EECproj'))
 
     ratio, covratio = getratio(val1, val2, cov1, cov2, cov1x2)
 
@@ -39,7 +40,7 @@ def plotProjectedEEC(x, covx,
                      label = None):
     if ax is None:
         fig, ax = setup_plain_canvas(isData)
-        ax.set_xlabel(get_ax_label(wrt))
+        ax.set_xlabel(get_ax_label(wrt, 'EECproj'))
 
     ax.set_ylabel("EEC")
 
@@ -48,7 +49,9 @@ def plotProjectedEEC(x, covx,
             print("Warning: logwidth is only sensible for dR. Setting to False")
         logwidth=False
 
-    vals, covs = project_projected(x, covx, binning, onto=wrt)
+    vals = project_projected(x, binning, onto=wrt)
+    covs = project_covprojected(covx, binning, onto=wrt)
+
     vals, covs, N = maybe_density(vals, covs, density, return_N=True)
 
     xedges = get_ax_edges(wrt)
@@ -150,7 +153,7 @@ def compareProjectedEEC(
                               wrt=wrt,
                               color = color_l[ix2])
 
-    rax.set_xlabel(get_ax_label(wrt))
+    rax.set_xlabel(get_ax_label(wrt, 'EECproj'))
     rax.set_ylabel('Ratio', loc='center')
 
     labelstr = binning_string(binning_AND(binning_l))
@@ -167,11 +170,13 @@ def compareProjectedEEC(
                       edgecolor='black'))
 
     if folder is not None:
-        outname = os.path.join(folder, fprefix)
-    
-        binnedname = binning_name(binning_AND(binning_l))
+        fname = ''
+        if fprefix is not None:
+            fname += fprefix+"_"
+        fname += binning_name(binning_AND(binning_l))
+        fname += ".png"
 
-        outname += "_"+binnedname+".png"
+        outname = os.path.join(folder, fname)
 
         savefig(outname)
     else:
@@ -198,8 +203,8 @@ def plotProjectedCorrelation(cov,
                    vmin=-1, vmax=1)
     fig.colorbar(im, cax=cax, orientation='vertical')
 
-    ax.set_xlabel(get_ax_label(wrt)+" bin")
-    ax.set_ylabel(get_ax_label(wrt)+" bin")
+    ax.set_xlabel(get_ax_label(wrt, 'EECproj')+" bin")
+    ax.set_ylabel(get_ax_label(wrt, 'EECproj')+" bin")
 
     plt.show()
 

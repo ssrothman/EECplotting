@@ -1,6 +1,6 @@
 {
     "binedges" : {
-        "pt" : [50, 100, 200, 500, 1000],
+        "pt" : [50, 65, 88, 120, 150, 186, 254, 326, 408, 1500],
         "dR" : [0.0005 ,0.001, 0.005, 
            0.01, 0.015, 0.02, 0.025,
            0.03, 0.035, 0.04, 0.045, 
@@ -14,36 +14,128 @@
         "btag" : [-0.5, 0.5, 1.5],
         "order" : [1.5, 2.5, 3.5, 4.5, 5.5, 6.5]
     },
-    "projshape" : ["order", "btag", "pt", "dR"],
+    "projshape" : ["statsplit", "poisson", "btag", "pt", "order", "dR"],
+    "covprojshape" : ["statsplit", "btag", "pt", "order", "dR", "btag", "pt", "order", "dR"],
     "axlabels" : {
-        "order" : "EEC order",
-        "btag" : "b tag",
-        "pt" : "$p_{T}$ [GeV]",
-        "dR" : "$\\Delta R$"
+        "order" : {
+            "EECproj" : "EEC order"
+        },
+        "btag" : {
+            "EECproj" : "b tag"
+        },
+        "dR" : {
+            "EECproj" : "$\\Delta R$"
+        },
+        "mass": {
+            "Z" : "$m_{Z}$ [GeV]"
+        },
+        "pt" : {
+            "leadMu" : "Leading muon $p_{T}$ [GeV]",
+            "subMu" : "Sub-leading muon $p_{T}$ [GeV]",
+            "Z" : "Z boson $p_{T}$ [GeV]",
+            "jets" : "Jet $p_{T}$ [GeV]",
+            "EECproj" : "$p_{T}^{Jet}$ [GeV]",
+            "Beff" : "Jet $p_{T}$ [GeV]"
+        },
+        "eta" : {
+            "leadMu" : "Leading muon $|\\eta|$",
+            "subMu" : "Sub-leading muon $|\\eta|$",
+            "jets" : "Jet $|\\eta|$"
+        },
+        "y" : {
+            "Z" : "Z boson $|y|$",
+            "jets" : "Jet $|y|$"
+        },
+        "HT" : {
+            "HT" : "LHE HT [GeV]"
+        },
+        "nTrueInt" : {
+            "PU" : "True number of interactions"
+        },
+        "rho" : {
+            "PU" : "Event transverse energy density"
+        },
+        "MET" : {
+            "selvar" : "Puppi MET [GeV]"
+        },
+        "numLooseB" : {
+            "selvar" : "Number of loose b jets"
+        },
+        "numMediumB" : {
+            "selvar" :  "Number of medium b jets"
+        },
+        "numTightB" : {
+            "selvar" : "Number of tight b jets"
+        }
     },
     "isinteger" : {
         "order" : true,
         "btag" : true,
         "pt" : false,
-        "dR" : false
+        "dR" : false,
+        "mass" : false,
+        "eta" : false,
+        "pt" : false,
+        "y" : false,
+        "HT" : false,
+        "nTrueInt" : true,
+        "rho" : false,
+        "MET" : false,
+        "numLooseB" : true,
+        "numMediumB" : true,
+        "numTightB" : true
     },
     "hasoverflow" : {
         "pt" : true,
         "dR" : true,
         "btag" : false,
-        "order" : false
+        "order" : false,
+        "mass": true,
+        "eta" : true,
+        "pt" : true,
+        "y" : true,
+        "HT" : true,
+        "nTrueInt" : true,
+        "rho" : true,
+        "MET" : true,
+        "numLooseB" : true,
+        "numMediumB" : true,
+        "numTightB" : true
     },
     "hasunderflow" : {
         "pt" : true,
         "dR" : true,
         "btag" : false,
-        "order" : false
+        "order" : false,
+        "mass": true,
+        "eta" : true,
+        "pt" : true,
+        "y" : true,
+        "HT" : true,
+        "nTrueInt" : true,
+        "rho" : true,
+        "MET" : true,
+        "numLooseB" : true,
+        "numMediumB" : true,
+        "numTightB" : true
     },
     "should_logx" : {
         "dR" : true,
         "pt" : true,
         "btag" : false,
-        "order" : false
+        "order" : false,
+        "mass": false,
+        "eta" : false,
+        "pt" : true,
+        "y" : false,
+        "HT" : true,
+        "nTrueInt" : false,
+        "rho" : false,
+        "MET" : true,
+        "numLooseB" : false,
+        "numMediumB" : false,
+        "numTightB" : false
     },
-    "should_logy" : true
+    "should_logy" : true,
+    "lumi" : 59.526
 }

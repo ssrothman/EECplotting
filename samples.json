@@ -1,0 +1,260 @@
+{
+    "DYJetsToLL_allHT" : {
+        "xsec" : 6447.566195000002,
+        "color": "lightblue",
+        "label": "$DY\\rightarrow\\ell\\ell$"
+    },
+    "DYJetsToLL" : {
+        "xsec" : 6077.22,
+        "color": "lightblue",
+        "label": "$DY\\rightarrow\\ell\\ell$",
+        "hists" : {
+            "Beff" : {
+                "noBSF" : "/data/submit/srothman/EEC/Jul14_2024/DYJetsToLL/Beff/hists_file0to2052_tight_noBtagSF.pkl"
+            },
+            "Kinematics" : {
+                "noBkgVeto" : "/data/submit/srothman/EEC/Apr24_2024/DYJetsToLL/Kinematics/hists_file0to1825_tight_scanSyst.pkl" ,
+                "scanSyst" : "/data/submit/srothman/EEC/Jul14_2024/DYJetsToLL/Kinematics/hists_file0to2052_tight_scanSyst.pkl"
+            },
+            "EECproj" : {
+                "testdz" : "/data/submit/srothman/EEC/Jun28_2024/DYJetsToLL/EECproj/hists_file0to1000_tight_manualcov.pkl"
+            }
+        }
+    },
+    "DYJetsToLL_HT-0to70" : {
+        "xsec" : 6077.22,
+        "color" : "lightblue",
+        "label" : "$DY\\rightarrow\\ell\\ell$; $H_{T}^{\\text{gen}} < 70$",
+        "hists" : {
+            "Beff" : {
+                "noBSF" : "/data/submit/srothman/EEC/Jul14_2024/DYJetsToLL_HT-0to70/Beff/hists_file0to2052_tight_noBtagSF.pkl"
+            },
+            "Kinematics" : {
+                "scanSyst" : "/data/submit/srothman/EEC/Jul14_2024/DYJetsToLL_HT-0to70/Kinematics/hists_file0to2052_tight_scanSyst.pkl"
+            }
+        }
+    },
+    "DYJetsToLL_HT-70to100" : {
+        "xsec" : 159.1,
+        "color" : "darkblue",
+        "label" : "$DY\\rightarrow\\ell\\ell$; $70 < H_{T}^{\\text{gen}} < 100$",
+        "hists" : {
+            "Beff" : {
+                "noBSF" : "/data/submit/srothman/EEC/Jul14_2024/DYJetsToLL_HT-70to100/Beff/hists_file0to952_tight_noBtagSF.pkl"
+            },
+            "Kinematics" : {
+                "scanSyst" : "/data/submit/srothman/EEC/Jul14_2024/DYJetsToLL_HT-70to100/Kinematics/hists_file0to952_tight_scanSyst.pkl"
+            }
+        }
+    },
+    "DYJetsToLL_HT-100to200" : {
+        "xsec" : 159.4,
+        "color" : "purple",
+        "label" : "$DY\\rightarrow\\ell\\ell$; $100 < H_{T}^{\\text{gen}} < 200$",
+        "hists" : {
+            "Beff" : {
+                "noBSF" : "/data/submit/srothman/EEC/Jul14_2024/DYJetsToLL_HT-100to200/Beff/hists_file0to1022_tight_noBtagSF.pkl"
+            },
+            "Kinematics" : {
+                "scanSyst" : "/data/submit/srothman/EEC/Jul14_2024/DYJetsToLL_HT-100to200/Kinematics/hists_file0to1022_tight_scanSyst.pkl"
+            }
+        }
+    },
+    "DYJetsToLL_HT-200to400" : {
+        "xsec" : 43.68,
+        "color" : "deeppink",
+        "label" : "$DY\\rightarrow\\ell\\ell$; $200 < H_{T}^{\\text{gen}} < 400$",
+        "hists" : {
+            "Beff" : {
+                "noBSF" : "/data/submit/srothman/EEC/Jul14_2024/DYJetsToLL_HT-200to400/Beff/hists_file0to746_tight_noBtagSF.pkl"
+            },
+            "Kinematics" : {
+                "scanSyst" : "/data/submit/srothman/EEC/Jul14_2024/DYJetsToLL_HT-200to400/Kinematics/hists_file0to746_tight_scanSyst.pkl"
+            }
+        }
+    },
+    "DYJetsToLL_HT-400to600" : {
+        "xsec" : 5.926,
+        "color" : "crimson",
+        "label" : "$DY\\rightarrow\\ell\\ell$; $400 < H_{T}^{\\text{gen}} < 600$",
+        "hists" : {
+            "Beff" : {
+                "noBSF" : "/data/submit/srothman/EEC/Jul14_2024/DYJetsToLL_HT-400to600/Beff/hists_file0to891_tight_noBtagSF.pkl"
+            },
+            "Kinematics" : {
+                "scanSyst" : "/data/submit/srothman/EEC/Jul14_2024/DYJetsToLL_HT-400to600/Kinematics/hists_file0to891_tight_scanSyst.pkl"
+            }
+        }
+    },
+    "DYJetsToLL_HT-600to800" : {
+        "xsec" : 1.439,
+        "color" : "orange",
+        "label" : "$DY\\rightarrow\\ell\\ell$; $600 < H_{T}^{\\text{gen}} < 800$",
+        "hists" : {
+            "Beff" : {
+                "noBSF" : "/data/submit/srothman/EEC/Jul14_2024/DYJetsToLL_HT-600to800/Beff/hists_file0to1405_tight_noBtagSF.pkl"
+            },
+            "Kinematics" : {
+                "scanSyst" : "/data/submit/srothman/EEC/Jul14_2024/DYJetsToLL_HT-600to800/Kinematics/hists_file0to1405_tight_scanSyst.pkl"
+            }
+        }
+    },
+    "DYJetsToLL_HT-800to1200" : {
+        "xsec" : 0.6462,
+        "color" : "gold",
+        "label" : "$DY\\rightarrow\\ell\\ell$; $800 < H_{T}^{\\text{gen}} < 1200$",
+        "hists" : {
+            "Beff" : {
+                "noBSF" : "/data/submit/srothman/EEC/Jul14_2024/DYJetsToLL_HT-800to1200/Beff/hists_file0to1374_tight_noBtagSF.pkl"
+            },
+            "Kinematics" : {
+                "scanSyst" : "/data/submit/srothman/EEC/Jul14_2024/DYJetsToLL_HT-800to1200/Kinematics/hists_file0to1374_tight_scanSyst.pkl"
+            }
+        }
+    },
+    "DYJetsToLL_HT-1200to2500" : {
+        "xsec" : 0.1516,
+        "color" : "limegreen",
+        "label" : "$DY\\rightarrow\\ell\\ell$; $1200 < H_{T}^{\\text{gen}} < 2500$",
+        "hists" : {
+            "Beff" : {
+                "noBSF" : "/data/submit/srothman/EEC/Jul14_2024/DYJetsToLL_HT-1200to2500/Beff/hists_file0to3071_tight_noBtagSF.pkl"
+            },
+            "Kinematics" : {
+                "scanSyst" : "/data/submit/srothman/EEC/Jul14_2024/DYJetsToLL_HT-1200to2500/Kinematics/hists_file0to3071_tight_scanSyst.pkl"
+            }
+        }
+    },
+    "DYJetsToLL_HT-2500toInf" : {
+        "xsec" : 0.003395,
+        "color" : "forestgreen",
+        "label" : "$DY\\rightarrow\\ell\\ell$; $2500 < H_{T}^{\\text{gen}}$",
+        "hists" : {
+            "Beff" : {
+                "noBSF" : "/data/submit/srothman/EEC/Jul14_2024/DYJetsToLL_HT-2500toInf/Beff/hists_file0to2502_tight_noBtagSF.pkl"
+            },
+            "Kinematics" : {
+                "scanSyst" : "/data/submit/srothman/EEC/Jul14_2024/DYJetsToLL_HT-2500toInf/Kinematics/hists_file0to2502_tight_scanSyst.pkl"
+            }
+        }
+    },
+    "DYJetsToLL_nodz" : {
+        "xsec" : 6077.22,
+        "color": "lightblue",
+        "label": "$DY\\rightarrow\\ell\\ell$",
+        "hists" : {
+            "EECproj" : {
+                "testdz" : "/data/submit/srothman/EEC/Jun28_2024/DYJetsToLL_nodz/EECproj/hists_file0to1000_tight_manualcov.pkl"
+            }
+        }
+    },
+    "TTTo2L2Nu": {
+        "xsec" : 87.31,
+        "color" : "red",
+        "label" : "$t\\bar{t}\\rightarrow2\\ell2\\nu$",
+        "hists" : {
+            "Kinematics" : {
+                "noBkgVeto" : "/data/submit/srothman/EEC/Apr24_2024/TTTo2L2Nu/Kinematics/hists_file0to2924_tight_scanSyst.pkl",
+                "scanSyst" : "/data/submit/srothman/EEC/Jul14_2024/TTTo2L2Nu/Kinematics/hists_file0to2064_tight_scanSyst.pkl"
+            }
+        }
+    },
+    "WW" : {
+        "xsec" : 118.7,
+        "color" : "blue",
+        "label" : "$WW$",
+        "hists" : {
+            "Kinematics" : {
+                "noBkgVeto" : "/data/submit/srothman/EEC/Apr24_2024/WW/Kinematics/hists_file0to319_tight.pkl",
+                "scanSyst" : "/data/submit/srothman/EEC/Jul14_2024/WW/Kinematics/hists_file0to83_tight_scanSyst.pkl"
+            }
+        }
+    },
+    "ZZ" : {
+        "xsec" : 16.523,
+        "color" : "green",
+        "label" : "$ZZ$",
+        "hists" : {
+            "Kinematics" : {
+                "noBkgVeto" : "/data/submit/srothman/EEC/Apr24_2024/ZZ/Kinematics/hists_file0to71_tight.pkl",
+                "scanSyst" : "/data/submit/srothman/EEC/Jul14_2024/ZZ/Kinematics/hists_file0to50_tight_scanSyst.pkl"
+            }
+        }
+    },
+    "WZ" : {
+        "xsec" : 47.13,
+        "color" : "orange",
+        "label" : "$WZ$",
+        "hists" : {
+            "Kinematics" : {
+                "noBkgVeto" : "/data/submit/srothman/EEC/Apr24_2024/WZ/Kinematics/hists_file0to164_tight.pkl",
+                "scanSyst" : "/data/submit/srothman/EEC/Jul14_2024/WZ/Kinematics/hists_file0to43_tight_scanSyst.pkl"
+            }
+        }
+    },
+    "ST_tW_top" : {
+        "xsec" : 39.65,
+        "color" : "purple",
+        "label" : "$tW$",
+        "hists" : {
+            "Kinematics" : {
+                "noBkgVeto" : "/data/submit/srothman/EEC/Apr24_2024/ST_tW_top/Kinematics/hists_file0to157_tight.pkl",
+                "scanSyst" : "/data/submit/srothman/EEC/Jul14_2024/ST_tW_top/Kinematics/hists_file0to67_tight_scanSyst.pkl"
+            }
+        }
+    },
+    "ST_tW_antitop" : {
+        "xsec" : 39.65,
+        "color" : "brown",
+        "label" : "$\\bar{t}W$",
+        "hists" : {
+            "Kinematics" : {
+                "noBkgVeto" : "/data/submit/srothman/EEC/Apr24_2024/ST_tW_antitop/Kinematics/hists_file0to158_tight.pkl",
+                "scanSyst" : "/data/submit/srothman/EEC/Jul14_2024/ST_tW_antitop/Kinematics/hists_file0to28_tight_scanSyst.pkl"
+            }
+        }
+    },
+    "ST_t_top" : {
+        "xsec" : 80,
+        "color" : "pink",
+        "label" : "$t$-channel $t$",
+        "hists" : {
+            "Kinematics" : {
+                "noBkgVeto" : "/data/submit/srothman/EEC/Apr24_2024/ST_t_top_5f/Kinematics/hists_file0to3955_tight.pkl",
+                "scanSyst" : "/data/submit/srothman/EEC/Jul14_2024/ST_t_top/Kinematics/hists_file0to984_tight_scanSyst.pkl"
+            }
+        }
+    },
+    "ST_t_antitop" : {
+        "xsec" : 134.2,
+        "color" : "gray",
+        "label" : "$t$-channel $\\bar{t}$",
+        "hists" : {
+            "Kinematics" : {
+                "noBkgVeto" : "/data/submit/srothman/EEC/Apr24_2024/ST_t_antitop_5f/Kinematics/hists_file0to1984_tight.pkl",
+                "scanSyst" : "/data/submit/srothman/EEC/Jul14_2024/ST_t_antitop/Kinematics/hists_file0to300_tight_scanSyst.pkl"
+            }
+        }
+    },
+    "DATA" : {
+        "lumi" : 59.526,
+        "color" : "black",
+        "label" : "DATA",
+        "hists" : {
+            "Kinematics" : {
+                "noBkgVeto" : {
+                    "2018A" : "/data/submit/srothman/EEC/Apr24_2024/DATA_2018A/Kinematics/hists_file0to1102_tight.pkl",
+                    "2018B" : "/data/submit/srothman/EEC/Apr24_2024/DATA_2018B/Kinematics/hists_file0to527_tight.pkl",
+                    "2018C" : "/data/submit/srothman/EEC/Apr24_2024/DATA_2018C/Kinematics/hists_file0to525_tight.pkl", 
+                    "2018D" : "/data/submit/srothman/EEC/Apr24_2024/DATA_2018D/Kinematics/hists_file0to2515_tight.pkl"
+                },
+                "scanSyst" : {
+                    "2018A" : "/data/submit/srothman/EEC/Jul14_2024/DATA_2018A/Kinematics/hists_file0to808_tight_scanSyst.pkl",
+                    "2018B" : "/data/submit/srothman/EEC/Jul14_2024/DATA_2018B/Kinematics/hists_file0to237_tight_scanSyst.pkl",
+                    "2018C" : "/data/submit/srothman/EEC/Jul14_2024/DATA_2018C/Kinematics/hists_file0to238_tight_scanSyst.pkl",
+                    "2018D" : "/data/submit/srothman/EEC/Jul14_2024/DATA_2018D/Kinematics/hists_file0to944_tight_scanSyst.pkl"
+                }
+            }
+        }
+    }
+}
