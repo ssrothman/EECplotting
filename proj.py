@@ -37,12 +37,19 @@ def plotProjectedEEC(x, covx,
                      logwidth=True,
                      density=True,
                      color = None,
-                     label = None):
+                     label = None,
+                     impact = False):
     if ax is None:
         fig, ax = setup_plain_canvas(isData)
         ax.set_xlabel(get_ax_label(wrt, 'EECproj'))
 
-    ax.set_ylabel("EEC")
+    if impact:
+        ax.set_ylabel("$\\Delta$ EEC")
+        if density:
+            print("WARNING: density is not sensible for impact. Setting to False")
+        density=False
+    else:
+        ax.set_ylabel("EEC")
 
     if wrt != 'dR':
         if logwidth:
@@ -66,7 +73,6 @@ def plotProjectedEEC(x, covx,
 
     ys = vals[:]
     yerrs = np.sqrt(np.diag(covs))
-    
 
     if has_overflow(wrt):
         ys = ys[:-1]
@@ -86,7 +92,7 @@ def plotProjectedEEC(x, covx,
     if should_logx(wrt):
         ax.set_xscale('log')
 
-    if should_logy():
+    if should_logy() and not impact:
         ax.set_yscale('log')
 
     ax.errorbar(xcenters, ys,
@@ -95,7 +101,7 @@ def plotProjectedEEC(x, covx,
                 color=color)
 
     if label is not None:
-        ax.legend()
+        ax.legend(loc='best')
 
     return vals, covs, N
  
