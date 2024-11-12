@@ -17,7 +17,18 @@
                 "scanSyst" : "/data/submit/srothman/EEC/Jul14_2024/DYJetsToLL/Kinematics/hists_file0to2052_tight_scanSyst.pkl"
             },
             "EECproj" : {
-                "testdz" : "/data/submit/srothman/EEC/Jun28_2024/DYJetsToLL/EECproj/hists_file0to1000_tight_manualcov.pkl"
+                "testdz" : "/data/submit/srothman/EEC/Jun28_2024/DYJetsToLL/EECproj/hists_file0to1000_tight_manualcov.pkl",
+                "nominal" : "/ceph/submit/data/group/cms/store/user/srothman/condor/nominal/merged.pkl",
+                "BtagEff" : "/ceph/submit/data/group/cms/store/user/srothman/condor/BtagEff/merged.pkl",
+                "BtagSF" : "/ceph/submit/data/group/cms/store/user/srothman/condor/BtagSF/merged.pkl",
+                "CBxsec" : "/ceph/submit/data/group/cms/store/user/srothman/condor/CBxsec/merged.pkl",
+                "JetMET" : "/ceph/submit/data/group/cms/store/user/srothman/condor/JetMET/merged.pkl",
+                "Lxsec" : "/ceph/submit/data/group/cms/store/user/srothman/condor/Lxsec/merged.pkl",
+                "Muon" : "/ceph/submit/data/group/cms/store/user/srothman/condor/muon/merged.pkl",
+                "Pileup" : "/ceph/submit/data/group/cms/store/user/srothman/condor/Pileup/merged.pkl",
+                "PS" : "/ceph/submit/data/group/cms/store/user/srothman/condor/PS/merged.pkl",
+                "Theory" : "/ceph/submit/data/group/cms/store/user/srothman/condor/Theory/merged.pkl",
+                "Trigger" : "/ceph/submit/data/group/cms/store/user/srothman/condor/BtagSF/merged.pkl"
             }
         }
     },

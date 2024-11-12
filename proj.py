@@ -57,7 +57,10 @@ def plotProjectedEEC(x, covx,
         logwidth=False
 
     vals = project_projected(x, binning, onto=wrt)
-    covs = project_covprojected(covx, binning, onto=wrt)
+    if covx is None:
+        covs = np.zeros((len(vals), len(vals)))
+    else:
+        covs = project_covprojected(covx, binning, onto=wrt)
 
     vals, covs, N = maybe_density(vals, covs, density, return_N=True)
 
@@ -107,7 +110,7 @@ def plotProjectedEEC(x, covx,
  
 def compareProjectedEEC(
                x_l, covx_l, 
-               binning_l = [{}],
+               binning_l = [],
                density = True,
                label_l = None,
                color_l = None,
@@ -120,6 +123,14 @@ def compareProjectedEEC(
     vals = []
     covs = []
     Ns = []
+
+    if type(binning_l) is dict:
+        binning_l = [binning_l]
+
+    if len(binning_l) == 0:
+        binning_l = [{}]*len(x_l)
+    elif len(binning_l) == 1:
+        binning_l = binning_l * len(x_l)
 
     for x, covx, binning, label, color in zip(x_l, covx_l, binning_l, label_l, color_l):
         v, c, n = plotProjectedEEC(x, covx,
@@ -134,7 +145,7 @@ def compareProjectedEEC(
         Ns.append(n)
 
     for ix2 in range(1, len(x_l)):
-        if x_l[ix2] is x_l[0]:
+        if x_l[ix2] is x_l[0] and covx_l[0] is not None:
             cov1x2 = project_cov1x2_projected(covx_l[0],
                                               binning_l[ix2], 
                                               binning_l[0],
@@ -161,6 +172,8 @@ def compareProjectedEEC(
 
     rax.set_xlabel(get_ax_label(wrt, 'EECproj'))
     rax.set_ylabel('Ratio', loc='center')
+
+    #rax.set_ylim(0.95, 1.05)
 
     labelstr = binning_string(binning_AND(binning_l))
 

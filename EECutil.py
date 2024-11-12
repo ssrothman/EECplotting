@@ -45,7 +45,8 @@ def binning_name(binning):
         else:
             raise ValueError("Unknown binning type")
         ans += '_'
-    if ans[-1] == '_':
+
+    if len(ans) > 0 and ans[-1] == '_':
         ans = ans[:-1]
 
     return ans
@@ -75,7 +76,7 @@ def binning_string(binning):
 
         ans += '\n'
 
-    if ans[-1] == '\n':
+    if len(ans) > 0 and ans[-1] == '\n':
         ans = ans[:-1]
 
     return ans
@@ -109,6 +110,9 @@ def project_projected(x, binning, onto):
     return projected
 
 def project_covprojected(covx, binning, onto):
+    if covx is None:
+        return None
+
     slice_list = []
     sum_list = []
     for i, axname in enumerate(config['covprojshape']):

@@ -1,7 +1,7 @@
 {
     "binedges" : {
-        "pt" : [50, 65, 88, 120, 150, 186, 254, 326, 408, 1500],
-        "dR" : [0.0005 ,0.001, 0.005, 
+        "pt" : [150, 300],
+        "dR" : [0.0001,
            0.01, 0.015, 0.02, 0.025,
            0.03, 0.035, 0.04, 0.045, 
            0.05, 0.06,  
@@ -14,8 +14,9 @@
         "btag" : [-0.5, 0.5, 1.5],
         "order" : [1.5, 2.5, 3.5, 4.5, 5.5, 6.5]
     },
-    "projshape" : ["btag", "pt", "order", "dR"],
-    "covprojshape" : ["btag", "pt", "order", "dR", "btag", "pt", "order", "dR"],
+    "projshape" : ["statsplit", "poisson", "btag", "pt", "order", "dR"],
+    "covprojshape" : ["statsplit", "btag", "pt", "order", "dR", "btag", "pt", "order", "dR"],
+    "transfershape" : ["order", "statsplit", "pt_Reco", "pt_Gen", "dR_Gen", "dR_Reco"],
     "systs" : ["$\\mu$ ID SF",     
              "Trigger SF",
              "L1 Prefiring", 
