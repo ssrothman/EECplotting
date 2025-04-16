@@ -3,8 +3,9 @@ from matplotlib.colors import LogNorm, Normalize
 import numpy as np
 import awkward as ak
 import util
-
-ptedges = np.array([0, 200, 400, 800, 1600, np.inf])
+import fitfuncs
+from scipy.optimize import curve_fit
+import contextlib
 
 RLedges = np.linspace(0, 1.0, 11)
 
@@ -12,294 +13,610 @@ redges_teedipole = np.linspace(0, 1.0, 21)
 ctedges_teedipole = np.linspace(0, np.pi/2, 21)
 
 redges_triangle = np.linspace(0, 1.0, 21)
-ctedges_triangle = np.linspace(0, 2*np.pi, 41)
+ctedges_triangle = np.linspace(0, 2*np.pi, 31)
 
-def compute_profiles(data, btag, ptbin, RLbin, iToy):
-    val = data[0, iToy, btag, ptbin, RLbin, 1:-1, 1:-1]
-    nr, ntheta = val.shape
+area_teedipole = 0.5 * (redges_teedipole[1:]**2 - redges_teedipole[:-1]**2)[:, None] \
+                     * (ctedges_teedipole[1:] - ctedges_teedipole[:-1])[None, :]
 
-    r_edges = redges_teedipole
-    theta_edges = ctedges_teedipole
+def compute_flux(H, RLbin, ptbin, iToy,
+                 jacobian=True,
+                 normalize=True):
+    H2d = H[{'R' : RLbin, 'pt' : ptbin, 'bootstrap' : iToy}]
 
-    area = 0.5*(np.square(r_edges[1:,None]) - np.square(r_edges[:-1,None]))*(theta_edges[None,1:] - theta_edges[None,:-1])
+    vals = H2d.values(flow=True)
 
-    flux = val/area
-    flux = flux/np.mean(flux)
+    if jacobian:
+        vals = vals/area_teedipole
 
-    angular_avg = np.sum(flux, axis=1)/ntheta
+    if normalize:
+        vals = vals/np.sum(vals)
+
+    return vals
+
+def compute_angular_average(H, RLbin, ptbin, iToy,
+                            jacobian=True,
+                            normalize=True):
+    flux = compute_flux(H, RLbin, ptbin, iToy,
+                        jacobian=jacobian,
+                        normalize=normalize)
+
+    angular_avg = np.mean(flux, axis=1)
+
+    return angular_avg
+
+def compute_angular_fluctuation(H, RLbin, ptbin, iToy,
+                                jacobian=True,
+                                normalize=True):
+    flux = compute_flux(H, RLbin, ptbin, iToy,
+                        jacobian=jacobian,
+                        normalize=normalize)
+
+    angular_avg = compute_angular_average(H, RLbin, ptbin, iToy,
+                                          jacobian=jacobian,
+                                          normalize=normalize)
 
     angular_fluctuation = flux/angular_avg[:,None]
 
-    return angular_avg, angular_fluctuation
+    return angular_fluctuation
 
-def compute_profiles_errs(data, btag, ptbin, RLbin):
-    ntoys = data.shape[1]
+def compute_differnce(H1, H2, RLbin, ptbin, iToy,
+                      jacobian=True,
+                      normalize=True,
+                      relative=False):
+    flux1 = compute_flux(H1, RLbin, ptbin, iToy,
+                         jacobian=jacobian,
+                         normalize=normalize)
 
-    nominal_avg, nominal_fluctuation = compute_profiles(data, btag, ptbin, RLbin, 0)
+    flux2 = compute_flux(H2, RLbin, ptbin, iToy,
+                         jacobian=jacobian,
+                         normalize=normalize)
 
-    diff_avg = []
-    diff_fluctuation = []
+    if relative:
+        return np.nan_to_num((flux2 - flux1)/flux1)
+    else:
+        return flux2 - flux1
 
-    for itoy in range(1, ntoys):
-        a, b = compute_profiles(data, btag, ptbin, RLbin, itoy)
-        diff_avg.append(a-nominal_avg)
-        diff_fluctuation.append(b-nominal_fluctuation)
+def errs_from_toys(fluxfunc, pulls=False, **kwargs):
 
-    diff_avg = np.array(diff_avg)
-    diff_fluctuation = np.array(diff_fluctuation)
-
-    mean_diff_avg = np.mean(diff_avg, axis=0)
-    mean_diff_fluctuation = np.mean(diff_fluctuation, axis=0)
-
-    std_diff_avg = np.std(diff_avg, axis=0)
-    std_diff_fluctuation = np.std(diff_fluctuation, axis=0)
-
-    return nominal_avg, nominal_fluctuation, std_diff_avg, std_diff_fluctuation
-
-def plot_profiles(data, btag, ptbin, RLbin,
-                  title,
-                  fit_powerlaw=False,
-                  show=True):
-    nominal_avg, nominal_fluctuation, std_diff_avg, std_diff_fluctuation = compute_profiles_errs(data, btag, ptbin, RLbin)
-
-    nr, ntheta = nominal_fluctuation.shape
-
-    redges = redges_teedipole
-    thetaedges = ctedges_teedipole
-
-    rwidths = redges[1:] - redges[:-1]
-    thetawidths = thetaedges[1:] - thetaedges[:-1]
-
-    rmid = (redges[1:] + redges[:-1])/2
-    thetamid = (thetaedges[1:] + thetaedges[:-1])/2
-
-    fig, (ax0, ax1) = plt.subplots(2,1)
-
-    fig.suptitle("%s\n%0.1f < RL < %0.1f\n%0.0f < pT < %0.0f" % (title,RLedges[RLbin-1], RLedges[RLbin], ptedges[ptbin], ptedges[ptbin+1]))
-
-    ax0.errorbar(rmid,
-                 nominal_avg,
-                 xerr = rwidths/2,
-                 yerr=std_diff_avg,
-                 fmt='o')
+    nominal = fluxfunc(**kwargs, iToy=0)
     
-    if fit_powerlaw:
-        import scipy.optimize as opt
-        def powerlaw(x, A, B):
-            return A*x**B
-        popt, pcov = opt.curve_fit(powerlaw, rmid[4:], 
-                                   nominal_avg[4:])
-        print(popt)
-        ax0.plot(rmid, powerlaw(rmid, *popt), color='red')
-        ax0.set_xscale('log')
-        ax0.text(0.8, 0.8, 'slope = %0.2f' % popt[1],
-                 fontsize=16, 
-                 bbox=dict(facecolor='white', alpha=0.5),
-                 transform=ax0.transAxes)
+    if 'H' in kwargs:
+        ntoys = kwargs['H'].axes['bootstrap'].extent - 1
+    elif 'H1' in kwargs:
+        ntoys = kwargs['H1'].axes['bootstrap'].extent - 1
+    else:
+        raise ValueError("No H or H1 provided to determine number of toys")
 
+    sumdiff = np.zeros_like(nominal)
+    sumdiff2 = np.zeros_like(nominal)
+
+    for iToy in range(1, ntoys+1):
+        nextflux = fluxfunc(**kwargs, iToy=iToy)
+
+        sumdiff += (nextflux - nominal)
+        sumdiff2 += (nextflux - nominal)**2
+
+    sumdiff /= ntoys
+    sumdiff2 /= ntoys
+
+    std_diff = np.sqrt(sumdiff2 - sumdiff**2)
+
+    if pulls:
+        return nominal/std_diff, np.ones_like(std_diff)
+    else:
+        return nominal, std_diff
+
+def flux_vals_errs(H, RLbin, ptbin,
+                   jacobian=True,
+                   normalize=True,
+                   pulls=False):
+    return errs_from_toys(compute_flux,
+                          H=H,
+                          RLbin=RLbin,
+                          ptbin=ptbin,
+                          jacobian=jacobian,
+                          normalize=normalize,
+                          pulls=pulls)
+
+def angular_avg_vals_errs(H, RLbin, ptbin,
+                          jacobian=True,
+                          normalize=True,
+                          pulls=False):
+    return errs_from_toys(compute_angular_average,
+                          H=H,
+                          RLbin=RLbin,
+                          ptbin=ptbin,
+                          jacobian=jacobian,
+                          normalize=normalize,
+                          pulls=pulls)
+
+def angular_fluctuation_vals_errs(H, RLbin, ptbin,
+                                  jacobian=True,
+                                  normalize=True,
+                                  pulls=False):
+    return errs_from_toys(compute_angular_fluctuation,
+                          H=H,
+                          RLbin=RLbin,
+                          ptbin=ptbin,
+                          jacobian=jacobian,
+                          normalize=normalize,
+                          pulls=pulls)
+
+def difference_vals_errs(H1, H2, RLbin, ptbin,
+                         jacobian=True,
+                         normalize=True,
+                         pulls=False,
+                         relative=False):
+    return errs_from_toys(compute_differnce,
+                          H1=H1,
+                          H2=H2,
+                          RLbin=RLbin,
+                          ptbin=ptbin,
+                          jacobian=jacobian,
+                          normalize=normalize,
+                          pulls=pulls,
+                          relative=relative)
+
+def plot_flux_2d(H, RLbin, ptbin,
+                 jacobian=True,
+                 normalize=True,
+                 logz = True,
+                 cmap='inferno'):
+    flux = compute_flux(H, RLbin, ptbin, 0,
+                        jacobian=jacobian,
+                        normalize=normalize)
+
+    ptedges = H.axes['pt'].edges
+
+    fig = plt.figure(figsize=(12, 12))
+    try:
+        ax = fig.add_subplot(111, projection='polar')
+        if logz:
+            norm = LogNorm(vmin=flux[flux>0].min(), vmax=flux.max())
+        else:
+            norm = Normalize(vmin=flux.min(), vmax=flux.max())
+
+        pc1 = ax.pcolormesh(ctedges_teedipole, redges_teedipole,
+                            flux,
+                            cmap=cmap,
+                            shading='auto',
+                            norm=norm)
+        pc2 = ax.pcolormesh(np.pi-ctedges_teedipole, redges_teedipole,
+                            flux,
+                            cmap=cmap,
+                            shading='auto',
+                            norm=norm)
+        pc3 = ax.pcolormesh(np.pi+ctedges_teedipole, redges_teedipole,
+                            flux,
+                            cmap=cmap,
+                            shading='auto',
+                            norm=norm)
+        pc4 = ax.pcolormesh(2*np.pi-ctedges_teedipole, redges_teedipole,
+                            flux,
+                            cmap=cmap,
+                            shading='auto',
+                            norm=norm)
+
+        plt.colorbar(pc1, ax=ax)
+
+        fig.suptitle("%0.1f < RL < %0.1f\n%0.0f < pT < %0.0f" % (RLedges[RLbin-1], RLedges[RLbin], ptedges[ptbin], ptedges[ptbin+1]))
+
+        plt.tight_layout()
+        plt.show()
+    finally:
+        plt.close(fig)
+
+def plot_angular_avg(H, RLbin, ptbin,
+                     jacobian=True,
+                     normalize=True,
+                     logx=False,
+                     logy=True):
+    fig = plt.figure(figsize=(12, 12))
+    try:
+        val, err = angular_avg_vals_errs(H, RLbin, ptbin, 
+                                         jacobian=jacobian,
+                                         normalize=normalize)
+        rmid = (redges_teedipole[1:] + redges_teedipole[:-1])/2
+        rwidths = redges_teedipole[1:] - redges_teedipole[:-1]
+
+        ax = fig.add_subplot(111)
+        ax.errorbar(rmid, val,
+                    xerr = rwidths/2,
+                    yerr=err,
+                    fmt='o')
+        if logx:
+            ax.set_xscale('log')
+        if logy:
+            ax.set_yscale('log')
+        ax.set_xlabel('r')
+        ax.set_ylabel('Angular average')
+
+        plt.tight_layout()
+        plt.show()
+    finally:
+        plt.close(fig)
+
+def plot_angular_fluctuation_2d(H, RLbin, ptbin,
+                                jacobian=True,
+                                normalize=True,
+                                cmap='coolwarm'):
+    flux = compute_angular_fluctuation(H, RLbin, ptbin, 0,
+                                        jacobian=jacobian,
+                                        normalize=normalize)
+    ptedges = H.axes['pt'].edges
+    fig = plt.figure(figsize=(12, 12))
+    try:
+        ax = fig.add_subplot(111, projection='polar')
+
+        d1 = flux-1
+        maxvar = np.max(np.abs(d1))
+
+        norm = Normalize(vmin=1-maxvar, vmax=1+maxvar)
+
+        pc1 = ax.pcolormesh(ctedges_teedipole, redges_teedipole,
+                            flux,
+                            cmap=cmap,
+                            shading='auto',
+                            norm=norm)
+        pc2 = ax.pcolormesh(np.pi-ctedges_teedipole, redges_teedipole,
+                            flux,
+                            cmap=cmap,
+                            shading='auto',
+                            norm=norm)
+        pc3 = ax.pcolormesh(np.pi+ctedges_teedipole, redges_teedipole,
+                            flux,
+                            cmap=cmap,
+                            shading='auto',
+                            norm=norm)
+        pc4 = ax.pcolormesh(2*np.pi-ctedges_teedipole, redges_teedipole,
+                            flux,
+                            cmap=cmap,
+                            shading='auto',
+                            norm=norm)
+        plt.colorbar(pc1, ax=ax)
+
+        fig.suptitle("%0.1f < RL < %0.1f\n%0.0f < pT < %0.0f" % (RLedges[RLbin-1], RLedges[RLbin], ptedges[ptbin], ptedges[ptbin+1]))
+        plt.tight_layout()
+        plt.show()
+    finally:
+        plt.close(fig)
+
+def plot_angular_fluctuation_1d(H, RLbin, ptbin,
+                                jacobian=True,
+                                normalize=True,
+                                rstep=5):
+    fig = plt.figure(figsize=(12, 12))
+    try:
+        val, err = angular_fluctuation_vals_errs(H, RLbin, ptbin, 
+                                                 jacobian=jacobian,
+                                                 normalize=normalize)
+        tmid = (ctedges_teedipole[1:] + ctedges_teedipole[:-1])/2
+        twidths = ctedges_teedipole[1:] - ctedges_teedipole[:-1]
+
+        ax = fig.add_subplot(111)
+        for i in range(0, val.shape[0], rstep):
+            q = ax.errorbar(tmid, val[i],
+                        xerr = twidths/2,
+                        yerr=err[i],
+                        fmt='o', label=f'%0.2f < r < %0.2f' % (redges_teedipole[i], redges_teedipole[i+1]))
+            ax.errorbar(np.pi-tmid, val[i],
+                        xerr = twidths/2,
+                        yerr=err[i],
+                        fmt='o', color=q[0].get_color())
+            ax.errorbar(np.pi+tmid, val[i],
+                        xerr = twidths/2,
+                        yerr=err[i],
+                        fmt='o', color=q[0].get_color())
+            ax.errorbar(2*np.pi-tmid, val[i],
+                        xerr = twidths/2,
+                        yerr=err[i],
+                        fmt='o', color=q[0].get_color())
+            
+        ax.axhline(1, color='black', linestyle='--')
+        ax.axvline(np.pi/2, color='gray', linestyle='--')
+        ax.axvline(np.pi, color='gray', linestyle='--')
+        ax.axvline(3*np.pi/2, color='gray', linestyle='--')
+
+        ax.set_xlabel('$\\phi$')
+        ax.set_ylabel('Angular fluctuation')
+        ax.legend(loc='upper right', frameon=True)
+
+        plt.tight_layout()
+        plt.show()
+    finally:
+        plt.close(fig)
+
+def plot_diff(H1, H2, RLbin, ptbin,
+              jacobian=True, normalize=True,
+              pulls=False, relative=False,
+              plot2d=True, plotr1d=True, plotphi1d=True, plothist=True,
+              savefig=None, show=True):
+    ptedges = H1.axes['pt'].edges
+    if plot2d:
+        fig = plt.figure(figsize=(12, 12))
+        try:
+            flux = compute_differnce(H1, H2, RLbin, ptbin, 0,
+                                      jacobian=jacobian,
+                                      normalize=normalize,
+                                      relative=relative)
+
+            ax = fig.add_subplot(111, projection='polar')
+
+            d1 = flux
+            maxvar = np.max(np.abs(d1))
+
+            norm = Normalize(vmin=-maxvar, vmax=maxvar)
+
+            pc1 = ax.pcolormesh(ctedges_teedipole, redges_teedipole,
+                                flux,
+                                cmap='coolwarm',
+                                shading='auto',
+                                norm=norm)
+            pc2 = ax.pcolormesh(np.pi-ctedges_teedipole, redges_teedipole,
+                                flux,
+                                cmap='coolwarm',
+                                shading='auto',
+                                norm=norm)
+            pc3 = ax.pcolormesh(np.pi+ctedges_teedipole, redges_teedipole,
+                                flux,
+                                cmap='coolwarm',
+                                shading='auto',
+                                norm=norm)
+            pc4 = ax.pcolormesh(2*np.pi-ctedges_teedipole, redges_teedipole,
+                                flux,
+                                cmap='coolwarm',
+                                shading='auto',
+                                norm=norm)
+            cb = plt.colorbar(pc1, ax=ax)
+
+            if relative:
+                cb.set_label('Relative difference')
+            else:
+                cb.set_label('Difference')
+
+            fig.suptitle("%0.1f < RL < %0.1f\n%0.0f < pT < %0.0f" % (RLedges[RLbin-1], RLedges[RLbin], ptedges[ptbin], ptedges[ptbin+1]))
+            plt.tight_layout()
+
+            if savefig is not None:
+                plt.savefig(savefig + '_2d.png', dpi=300, format='png', bbox_inches='tight')
+            if show:
+                plt.show()
+        finally:
+            plt.close(fig)
+
+    if plotr1d or plotphi1d:
+        val, err = difference_vals_errs(H1, H2, RLbin, ptbin,
+                                        jacobian=jacobian,
+                                        normalize=normalize,
+                                        pulls=pulls,
+                                        relative=relative)
+
+    if plotr1d:
+        fig = plt.figure(figsize=(12, 6))
+        try:
+            rmid = (redges_teedipole[1:] + redges_teedipole[:-1])/2
+            rwidths = redges_teedipole[1:] - redges_teedipole[:-1]
+
+            rmid_b = np.broadcast_to(rmid[:, None], val.shape)
+            rwidths_b = np.broadcast_to(rwidths[None, :], val.shape)
+
+            ctmid = (ctedges_teedipole[1:] + ctedges_teedipole[:-1])/2
+            cmap = plt.get_cmap('Reds')
+
+            ax = fig.add_subplot(111)
+
+            for i in range(val.shape[1]):
+                jitter = ((-val.shape[1]/2 + i)/val.shape[1]) * rwidths/3
+                ax.errorbar(rmid_b[:,i]+jitter, 
+                            val[:,i],
+                            xerr = rwidths_b[:,i]/2,
+                            yerr=err[:,i],
+                            color=cmap(ctmid[i]/ctmid.max()),
+                            fmt='o')
+            ax.set_xlabel('r')
+
+            if pulls:
+                ax.set_ylabel('Pulls')
+            elif relative:
+                ax.set_ylabel('Relative difference')
+            else:
+                ax.set_ylabel('Difference')
+
+            ax.axhline(0, color='black', linestyle='--')
+
+            plt.tight_layout()
+            if savefig is not None:
+                plt.savefig(savefig + '_r1d.png', dpi=300, format='png', bbox_inches='tight')
+            if show:
+                plt.show()
+        finally:
+            plt.close(fig)
+
+    if plotphi1d:
+        fig = plt.figure(figsize=(12, 6))
+        try:
+            tmid = (ctedges_teedipole[1:] + ctedges_teedipole[:-1])/2
+            twidths = ctedges_teedipole[1:] - ctedges_teedipole[:-1]
+
+            tmid_b = np.broadcast_to(tmid[None, :], val.shape)
+            twidths_b = np.broadcast_to(twidths[:, None], val.shape)
+
+            jitter = np.random.uniform(-twidths/5, twidths/5, size=tmid_b.shape)
+            rmid_b = np.broadcast_to(rmid[:, None], val.shape)
+            cmap = plt.get_cmap('Reds')
+            colors = cmap(rmid_b.ravel())
+
+            ax = fig.add_subplot(111)
+            for i in range(val.shape[0]):
+                jitter = ((-val.shape[0]/2 + i)/val.shape[0]) * twidths/3
+                ax.errorbar(tmid_b[i]+jitter, val[i],
+                            xerr = twidths_b[i]/2,
+                            yerr=err[i],
+                            color=cmap(rmid[i]/rmid.max()),
+                            fmt='o')
+            ax.set_xlabel('$\\phi$')
+            if pulls:
+                ax.set_ylabel('Pulls')
+            elif relative:
+                ax.set_ylabel('Relative difference')
+            else:
+                ax.set_ylabel('Difference')
+
+            ax.axhline(0, color='black', linestyle='--')
+
+            plt.tight_layout()
+            if savefig is not None:
+                plt.savefig(savefig + '_phi1d.png', dpi=300, format='png', bbox_inches='tight')
+            if show:
+                plt.show()
+        finally:
+            plt.close(fig)
+
+    if plothist:
+        fig = plt.figure(figsize=(12, 12))
+        try:
+            ax = fig.add_subplot(111)
+            ax.hist(val.ravel(), bins=21, histtype='step')
+            if pulls:
+                ax.set_xlabel('Pulls')
+            elif relative:
+                ax.set_xlabel('Relative difference')
+            else:
+                ax.set_xlabel('Difference')
+            ax.set_ylabel('Counts')
+            ax.axvline(0, color='black', linestyle='--')
+
+            plt.tight_layout()
+            if savefig is not None:
+                plt.savefig(savefig + '_hist.png', dpi=300, format='png', bbox_inches='tight')
+            if show: 
+                plt.show()
+        finally:
+            plt.close(fig)
+
+def model_background(arr, totalname, backgroundname_l, label_l,
+                     btag, ptbin, RLbin,
+                     triangle=False,
+                     whichfit='Linear'):
+
+    fig, ((ax0, ax1), (ax2, ax3)) = plt.subplots(2,2, figsize=(16,12))
+
+    total_nom = compute_shape(arr[totalname], 
+                              btag, ptbin, RLbin, 0,
+                              triangle=triangle,
+                              normalize=False,
+                              jacobian=True)
+    bkgs_nom = {}
+    for bkgname in backgroundname_l:
+        bkgs_nom[bkgname] = compute_shape(arr[bkgname], 
+                                          btag, ptbin, RLbin, 0,
+                                          triangle=triangle,
+                                          normalize=False,
+                                          jacobian=True)
+
+    total_var = []
+    bkgs_var = {}
+    for bkgname in backgroundname_l:
+        bkgs_var[bkgname] = []
+
+    ntoys = arr[totalname].shape[1] - 1
+    for iToy in range(1, ntoys+1):
+        nexttotal = compute_shape(arr[totalname],
+                                  btag, ptbin, RLbin, iToy,
+                                  triangle=triangle,
+                                  normalize=False,
+                                  jacobian=True)
+        total_var.append(nexttotal * total_nom.sum()/nexttotal.sum())
+
+        for bkgname in backgroundname_l:
+            nextbkg = compute_shape(arr[bkgname],
+                                    btag, ptbin, RLbin, iToy,
+                                    triangle=triangle,
+                                    normalize=False,
+                                    jacobian=True)
+            bkgs_var[bkgname].append(nextbkg * bkgs_nom[bkgname].sum()/nextbkg.sum())
+
+    thediff = total_var - total_nom[None,:,:]
+
+    total_var = np.asarray(total_var)
+    dtotal = np.sqrt(np.sum(np.square(total_var - total_nom[None,:,:]), axis=0))/ntoys
+
+    dbkgs = {}
+    for bkgname in backgroundname_l:
+        bkgs_var[bkgname] = np.asarray(bkgs_var[bkgname])
+        dbkgs[bkgname] = np.sqrt(np.sum(np.square(bkgs_var[bkgname] - bkgs_nom[bkgname][None,:,:]), axis=0))/ntoys
+
+
+    residuals = {}
+    dresiduals = {}
+    fitfunc = fitfuncs.get_func(whichfit)
+    for bkgname, label in zip(backgroundname_l, label_l):
+        popt, pcov = curve_fit(
+            fitfunc.func,
+            total_nom.ravel(),
+            bkgs_nom[bkgname].ravel(),
+            p0 = fitfunc.p0(),
+            sigma = dbkgs[bkgname].ravel(),
+            absolute_sigma = True
+        )
+        
+        fine_x = np.linspace(total_nom.min(), 
+                             total_nom.max(), 
+                             1000)
+        fine_y = fitfunc.func(fine_x, *popt)
+        q = ax0.plot(fine_x, fine_y, '--',
+                     label=fitfunc.get_text(popt))
+
+        ax0.errorbar(total_nom.ravel(), 
+                     bkgs_nom[bkgname].ravel(), 
+                     xerr=dtotal.ravel(),
+                     yerr=dbkgs[bkgname].ravel(),
+                     fmt='o',
+                     label=label,
+                     color = q[0].get_color())
+
+        residuals[bkgname] = (bkgs_nom[bkgname] - fitfunc.func(total_nom, *popt))
+        dresiduals[bkgname] = np.sqrt(np.square(dbkgs[bkgname]))
+
+    ax0.legend(fontsize=16)
+    ax0.set_xlabel("Total")
+    ax0.set_ylabel("Background")
+    ax0.set_xscale('log')
     ax0.set_yscale('log')
-    ax0.set_xlabel('r')
-    ax0.set_ylabel('Radial profile')
-    ax0.set_xlim(0, 1)
 
-    for r in [1,2,3]:
-        ax1.errorbar(thetamid,
-                     nominal_fluctuation[r], 
-                     yerr=std_diff_fluctuation[r], 
-                     xerr=thetawidths/2,
-                     fmt='o', label=f'%0.2f < r < %0.2f' % (redges[r], redges[r+1]))
-    ax1.set_xlabel(r'$\theta$')
-    ax1.set_ylabel('Angular profile')
-    ax1.axhline(1, color='black', linestyle='--')
-    #legend inside of opaque box
-    ax1.legend(loc='upper right', frameon=True, fontsize=10)
-    ax1.set_xlim(0, np.pi/2)
+    rcenters = (redges_teedipole[1:] + redges_teedipole[:-1])/2
+    ctcenters = (ctedges_teedipole[1:] + ctedges_teedipole[:-1])/2
+
+    rcenters_b = np.broadcast_to(rcenters[:, None], total_nom.shape)
+    ctcenters_b = np.broadcast_to(ctcenters[None, :], total_nom.shape)
+
+    for bkgname, label in zip(backgroundname_l, label_l):
+        z = residuals[bkgname]/total_nom
+        maxZ = np.max(np.abs(z))
+
+        ax1.pcolormesh(rcenters_b, ctcenters_b, z, 
+                       cmap='RdBu', vmin=-maxZ, vmax=maxZ)
+
+        ax2.errorbar(rcenters_b.ravel(), 
+                     z.ravel(),
+                     fmt='o',
+                     label=label)
+
+        ax3.errorbar(ctcenters_b.ravel(),
+                     z.ravel(),
+                     fmt='o',
+                     label=label)
+
+    ax1.set_xlabel('r')
+    ax1.set_ylabel(r'$\phi$')
+
+    ax2.set_xlabel('r')
+    ax2.set_ylabel('Residuals/Total')
+    ax2.axhline(0, color='red', linestyle='--')
+
+    ax3.set_xlabel(r'$\phi$')
+    ax3.set_ylabel('Residuals/Total')
+    ax3.axhline(0, color='red', linestyle='--')
 
     plt.tight_layout()
-
-    if show:
-        plt.show()
-
-def get_normalized_shape(data, btag, ptbin, RLbin, 
-                         normalize=True, triangle=False):
-    val = data[:,0]
-
-    if triangle:
-        theval = val[0, btag, ptbin, RLbin, 1:-1, 1:-1]
-    else:
-        theval = val[0, btag, ptbin, RLbin, 1:-1, 1:-1]
-
-    nr, ntheta = theval.shape
-
-    if triangle:
-        r_edges = redges_triangle
-        theta_edges = ctedges_triangle
-    else:
-        r_edges = redges_teedipole
-        theta_edges = ctedges_teedipole
-
-    r_mid = (r_edges[1:] + r_edges[:-1])/2
-    theta_mid = (theta_edges[1:] + theta_edges[:-1])/2
-
-    if normalize:
-        area = 0.5*(r_edges[1:,None]**2 - r_edges[:-1,None]**2)*(theta_edges[None,1:] - theta_edges[None,:-1])
-        theval = theval/area
-
-    return theval
-
-def check_background(total, background_l, name_l, title):
-    def proportional(x, a):
-        return a*x
-
-    def linear(x, a, b):
-        return a*x + b
-
-    def quadratic(x, a, b, c):
-        return a*x**2 + b*x + c
-
-    from scipy.optimize import curve_fit
-    for background, name in zip(background_l, name_l):
-        q = plt.plot(np.log(total.ravel()), 
-                     np.log(background.ravel()), 
-                     'o',
-                     label=name)
-
-        popt, pcov = curve_fit(linear, 
-                               np.log(total.ravel()), 
-                               np.log(background.ravel()))
-        x_fine = np.linspace(np.log(total.ravel()).min(),
-                             np.log(total.ravel()).max(), 100)
-        plt.plot(x_fine,
-                 linear(x_fine, *popt), 
-                 '--', color=q[0].get_color(),
-                 label='%g x + %g' % (popt[0], popt[1]))
-
-    plt.title(title)
-    plt.legend()
-    plt.xlabel("Log(Total)")
-    plt.ylabel("Log(Background)")
     plt.show()
-
-
-def plot_total_heatmap(data, btag, ptbin, RLbin,
-                       title, triangle=False,
-                       normalize = True,
-                       lognorm=True,
-                       show=True):
-    val = data[:,0]
-
-    if triangle:
-        theval = val[0, btag, ptbin, RLbin, 1:-1, 1:-1]
-    else:
-        theval = val[0, btag, ptbin, RLbin, 1:-1, 1:-1]
-
-    nr, ntheta = theval.shape
-
-    if triangle:
-        r_edges = redges_triangle
-        theta_edges = ctedges_triangle
-    else:
-        r_edges = redges_teedipole
-        theta_edges = ctedges_teedipole
-
-    r_mid = (r_edges[1:] + r_edges[:-1])/2
-    theta_mid = (theta_edges[1:] + theta_edges[:-1])/2
-
-    if normalize:
-        area = 0.5*(r_edges[1:,None]**2 - r_edges[:-1,None]**2)*(theta_edges[None,1:] - theta_edges[None,:-1])
-        theval = theval/area
-
-
-    fig, ax = plt.subplots(subplot_kw={'projection': 'polar'})
-    if lognorm:
-        norm = LogNorm(vmin=theval[theval>0].min(), vmax=theval.max())
-    else:
-        norm = Normalize(vmin=theval.min(), vmax=theval.max())
-
-    if triangle:
-        pc1 = ax.pcolormesh(theta_edges, r_edges,
-                            theval,
-                            cmap='inferno',
-                            shading='auto',
-                            norm=norm)
-    else:
-        cmap = 'inferno'
-        pc1 = ax.pcolormesh(theta_edges, r_edges,
-                            theval,
-                            cmap=cmap,
-                            shading='auto',
-                            norm=norm)
-        pc2 = ax.pcolormesh(np.pi-theta_edges, r_edges,
-                            theval,
-                            cmap=cmap,
-                            shading='auto',
-                            norm=norm)
-        pc3 = ax.pcolormesh(np.pi+theta_edges, r_edges,
-                            theval,
-                            cmap=cmap,
-                            shading='auto',
-                            norm=norm)
-        pc4 = ax.pcolormesh(2*np.pi-theta_edges, r_edges,
-                            theval,
-                            cmap=cmap,
-                            shading='auto',
-                            norm=norm)
-    plt.colorbar(pc1, ax=ax)
-
-    fig.suptitle("%s\n%0.1f < RL < %0.1f\n%0.0f < pT < %0.0f" % (title,RLedges[RLbin-1], RLedges[RLbin], ptedges[ptbin], ptedges[ptbin+1]))
-
-    plt.tight_layout()
-    if show:
-        plt.show()
-
-def plot_modulation_heatmap(data, btag, ptbin, RLbin,
-                       title, show=True):
-    val = data[:,0]
-
-    theval = val[0, btag, ptbin, RLbin, 1:-1, 1:-1]
-
-    nr, ntheta = theval.shape
-
-    r_edges = redges_teedipole
-    theta_edges = ctedges_teedipole
-
-    r_mid = (r_edges[1:] + r_edges[:-1])/2
-    theta_mid = (theta_edges[1:] + theta_edges[:-1])/2
-
-    area = 0.5*(r_edges[1:,None]**2 - r_edges[:-1,None]**2)*(theta_edges[None,1:] - theta_edges[None,:-1])
-
-    theval = theval/area
-
-    angular_avg = np.sum(theval, axis=1, keepdims=True)/ntheta
-    theval = theval/angular_avg
-
-    fig, ax = plt.subplots(subplot_kw={'projection': 'polar'})
-    norm = Normalize(vmin=theval[theval>0].min(), vmax=theval.max())
-
-    cmap = 'inferno'
-    pc1 = ax.pcolormesh(theta_edges, r_edges,
-                        theval,
-                        cmap=cmap,
-                        shading='auto',
-                        norm=norm)
-    pc2 = ax.pcolormesh(np.pi-theta_edges, r_edges,
-                        theval,
-                        cmap=cmap,
-                        shading='auto',
-                        norm=norm)
-    pc3 = ax.pcolormesh(np.pi+theta_edges, r_edges,
-                        theval,
-                        cmap=cmap,
-                        shading='auto',
-                        norm=norm)
-    pc4 = ax.pcolormesh(2*np.pi-theta_edges, r_edges,
-                        theval,
-                        cmap=cmap,
-                        shading='auto',
-                        norm=norm)
-    plt.colorbar(pc1, ax=ax)
-    fig.suptitle("%s\n%0.1f < RL < %0.1f\n%0.0f < pT < %0.0f" % (title,RLedges[RLbin-1], RLedges[RLbin], ptedges[ptbin], ptedges[ptbin+1]))
-    plt.tight_layout()
-
-    if show:
-        plt.show()
