@@ -1,146 +1,199 @@
 {
-    "binedges" : {
-        "pt" : [150, 300],
-        "dR" : [0.0001,
-           0.01, 0.015, 0.02, 0.025,
-           0.03, 0.035, 0.04, 0.045, 
-           0.05, 0.06,  
-           0.07, 0.08,
-           0.09, 0.10, 
-           0.11, 0.13, 0.15,
-           0.20, 0.25, 0.30, 0.35,
-           0.40, 0.50, 0.60, 
-           0.70, 0.80, 1.00],
-        "btag" : [-0.5, 0.5, 1.5],
-        "order" : [1.5, 2.5, 3.5, 4.5, 5.5, 6.5]
-    },
-    "projshape" : ["statsplit", "poisson", "btag", "pt", "order", "dR"],
-    "covprojshape" : ["statsplit", "btag", "pt", "order", "dR", "btag", "pt", "order", "dR"],
-    "transfershape" : ["order", "statsplit", "pt_Reco", "pt_Gen", "dR_Gen", "dR_Reco"],
-    "systs" : ["$\\mu$ ID SF",     
-             "Trigger SF",
-             "L1 Prefiring", 
-             "$\\mu$ iso SF"], 
-    "axlabels" : {
-        "order" : {
-            "EECproj" : "EEC order"
-        },
-        "btag" : {
-            "EECproj" : "b tag"
-        },
-        "dR" : {
-            "EECproj" : "$\\Delta R$"
-        },
-        "mass": {
-            "Z" : "$m_{Z}$ [GeV]"
-        },
+    "Lumi" : 59.83,
+    "Year" : 2018,
+    "Approval_Text" : "Work in progress",
+    "Ratiopad_Height" : 0.5,
+    "Figure_Size" : [12, 12],
+    "KinAxes" : {
         "pt" : {
-            "leadMu" : "Leading muon $p_{T}$ [GeV]",
-            "subMu" : "Sub-leading muon $p_{T}$ [GeV]",
-            "Z" : "Z boson $p_{T}$ [GeV]",
-            "jets" : "Jet $p_{T}$ [GeV]",
-            "EECproj" : "$p_{T}^{Jet}$ [GeV]",
-            "Beff" : "Jet $p_{T}$ [GeV]"
+            "label" : "$p_T$ [GeV]",
+            "logx" : true,
+            "logy" : true
         },
         "eta" : {
-            "leadMu" : "Leading muon $|\\eta|$",
-            "subMu" : "Sub-leading muon $|\\eta|$",
-            "jets" : "Jet $|\\eta|$"
+            "label" : "$\\eta$",
+            "logx" : false,
+            "logy" : false
         },
-        "y" : {
-            "Z" : "Z boson $|y|$",
-            "jets" : "Jet $|y|$"
+        "phi" : {
+            "label" : "$\\phi$",
+            "logx" : false,
+            "logy" : false
         },
-        "HT" : {
-            "HT" : "LHE HT [GeV]"
+        "nConstituents" : {
+            "label" : "Number of jet constituents",
+            "logx" : false,
+            "logy" : true
+        },
+        "nPassingParts" : {
+            "label" : "Number of passing jet constituents",
+            "logx" : false,
+            "logy" : true
+        },
+        "passLooseB" : {
+            "label" : "B-tagged [loose working point]",
+            "logx" : false,
+            "logy" : false
+        },
+        "passMediumB" : {
+            "label" : "B-tagged [medium working point]",
+            "logx" : false,
+            "logy" : false
+        },
+        "passTightB" : {
+            "label" : "B-tagged [tight working point]",
+            "logx" : false,
+            "logy" : false
         },
         "nTrueInt" : {
-            "PU" : "True number of interactions"
+            "label" : "MC-tTruth number interactions",
+            "logx" : false,
+            "logy" : false
         },
         "rho" : {
-            "PU" : "Event transverse energy density"
+            "label" : "Transverse energy density [GeV]",
+            "logx" : false,
+            "logy" : true
         },
         "MET" : {
-            "selvar" : "Puppi MET [GeV]"
+            "label" : "Missing $p_T$ [GeV]",
+            "logx" : true,
+            "logy" : true
         },
         "numLooseB" : {
-            "selvar" : "Number of loose b jets"
+            "label" : "Number of loose B-tagged jets",
+            "logx" : false,
+            "logy" : false
         },
         "numMediumB" : {
-            "selvar" :  "Number of medium b jets"
+            "label" : "Number of medium B-tagged jets",
+            "logx" : false,
+            "logy" : false
         },
         "numTightB" : {
-            "selvar" : "Number of tight b jets"
+            "label" : "Number of tight B-tagged jets",
+            "logx" : false,
+            "logy" : false
+        },
+        "numJets" : {
+            "label" : "Number of passing jets",
+            "logx" : false,
+            "logy" : true
+        },
+        "Zpt" : {
+            "label" : "Dimuon $p_T$ [GeV]",
+            "logx" : true,
+            "logy" : true
+        },
+        "Zy" : {
+            "label" : "Dimuon $y$",
+            "logx" : false,
+            "logy" : false
+        },
+        "Zmass" : {
+            "label" : "Dimuon mass [GeV]",
+            "logx" : false,
+            "logy" : true
+        },
+        "leadMuPt" : {
+            "label" : "Leading muon $p_T$ [GeV]",
+            "logx" : true,
+            "logy" : true
+        },
+        "leadMuEta" : {
+            "label" : "Leading muon $\\eta$",
+            "logx" : false,
+            "logy" : false
+        },
+        "leadMuCharge" : {
+            "label" : "Leading muon charge",
+            "logx" : false,
+            "logy" : false
+        },
+        "subMuPt" : {
+            "label" : "Subleading muon $p_T$ [GeV]",
+            "logx" : true,
+            "logy" : true
+        },
+        "subMuEta" : {
+            "label" : "Subleading muon $\\eta$",
+            "logx" : false,
+            "logy" : false
+        },
+        "subMuCharge" : {
+            "label" : "Subleading muon charge",
+            "logx" : false,
+            "logy" : false
+        },
+        "pdgid" : {
+            "label" : "Particle ID",
+            "logx" : false,
+            "logy" : false
+        },
+        "charge" : {
+            "label" : "Charge",
+            "logx" : false,
+            "logy" : false
+        },
+        "dxy" : {
+            "label" : "Transverse impact parameter [cm]",
+            "logx" : false,
+            "logy" : true
+        },
+        "dz" : {
+            "label" : "Longitudinal impact parameter [cm]",
+            "logx" : false,
+            "logy" : true
+        },
+        "puppiWeight" : {
+            "label" : "Puppi weight",
+            "logx" : false,
+            "logy" : true
+        },
+        "fromPV" : {
+            "label" : "From PV flag",
+            "logx" : false,
+            "logy" : false
+        },
+        "jetPt" : {
+            "label" : "Jet $p_T$ [GeV]",
+            "logx" : true,
+            "logy" : true
+        },
+        "jetEta" : {
+            "label" : "Jet $\\eta$",
+            "logx" : false,
+            "logy" : false
+        },
+        "jetPhi" : {
+            "label" : "Jet $\\phi$",
+            "logx" : false,
+            "logy" : false
+        },
+        "pt_over_jetPt" : {
+            "label" : "$p_T$ / Jet $p_T$",
+            "logx" : true,
+            "logy" : true
+        },
+        "wt" : {
+            "label" : "EEC weight",
+            "logx" : true,
+            "logy" : true
+        },
+        "R" : {
+            "label" : "EEC R coordinate [bin]",
+            "logx" : false,
+            "logy" : false
+        },
+        "r" : {
+            "label" : "EEC r coordinate [bin]",
+            "logx" : false,
+            "logy" : false
+        },
+        "c" : {
+            "label" : "EEC c coordinate [bin]",
+            "logx" : false,
+            "logy" : false
         }
-    },
-    "isinteger" : {
-        "order" : true,
-        "btag" : true,
-        "pt" : false,
-        "dR" : false,
-        "mass" : false,
-        "eta" : false,
-        "pt" : false,
-        "y" : false,
-        "HT" : false,
-        "nTrueInt" : true,
-        "rho" : false,
-        "MET" : false,
-        "numLooseB" : true,
-        "numMediumB" : true,
-        "numTightB" : true
-    },
-    "hasoverflow" : {
-        "pt" : true,
-        "dR" : true,
-        "btag" : false,
-        "order" : false,
-        "mass": true,
-        "eta" : true,
-        "pt" : true,
-        "y" : true,
-        "HT" : true,
-        "nTrueInt" : true,
-        "rho" : true,
-        "MET" : true,
-        "numLooseB" : true,
-        "numMediumB" : true,
-        "numTightB" : true
-    },
-    "hasunderflow" : {
-        "pt" : true,
-        "dR" : true,
-        "btag" : false,
-        "order" : false,
-        "mass": true,
-        "eta" : true,
-        "pt" : true,
-        "y" : true,
-        "HT" : true,
-        "nTrueInt" : true,
-        "rho" : true,
-        "MET" : true,
-        "numLooseB" : true,
-        "numMediumB" : true,
-        "numTightB" : true
-    },
-    "should_logx" : {
-        "dR" : true,
-        "pt" : true,
-        "btag" : false,
-        "order" : false,
-        "mass": false,
-        "eta" : false,
-        "pt" : true,
-        "y" : false,
-        "HT" : true,
-        "nTrueInt" : false,
-        "rho" : false,
-        "MET" : true,
-        "numLooseB" : false,
-        "numMediumB" : false,
-        "numTightB" : false
-    },
-    "should_logy" : true,
-    "lumi" : 59.526
+    }
 }
