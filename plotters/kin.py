@@ -3,6 +3,393 @@ import os.path
 import numpy as np
 import mplhep as hep
 from matplotlib.colors import Normalize, LogNorm
+import hist
+import pyarrow as pa
+
+from histplot import simon_histplot, simon_histplot_ratio
+
+xlabels = {
+    'pt' : '$p_{T} [GeV]$',
+    'eta' : '$\\eta$',
+    'phi'  : '$\\phi$',
+    'nConstituents' : 'Number of jet constituents',
+    'nPassingParts' : 'Number of jet constitunts passing selections',
+    'passLooseB' : 'B-tagged [loose working point]',
+    'passMediumB' : 'B-tagged [medium working point]',
+    'passTightB' : 'B-tagged [tight working point]',
+    'nTrueInt' : 'MC-Truth number of interactions',
+    'rho' : 'Transverse energy density [GeV]',
+    'MET' : 'Missing transverse energy [GeV]',
+    'numLooseB' : 'Number of loose B-jets',
+    'numMediumB' : 'Number of medium B-jets',
+    'numTightB' : 'Number of tight B-jets',
+    'numJets' : 'Number of jets',
+    'Zpt' : 'Dimuon $p_{T}$ [GeV]',
+    'Zy' : 'Dimuon rapidity',
+    'Zmass' : 'Dimuon mass [GeV]',
+    'leadMuPt' : 'Leading muon $p_{T}$ [GeV]',
+    'leadMuEta' : 'Leading muon $\\eta$',
+    'leadMuCharge' : 'Leading muon charge',
+    'subMuPt' : 'Subleading muon $p_{T}$ [GeV]',
+    'subMuEta' : 'Subleading muon $\\eta$',
+    'subMuCharge' : 'Subleading muon charge',
+    'pdgid' : "Particle ID",
+    'charge' : "Charge",
+    'dxy' : "Transverse impact parameter [cm]",
+    'dz' : "Longitudinal impact parameter [cm]",
+    'puppiWeight' : "PUPPI weight",
+    'fromPV' : 'From PV flag',
+    'jetPt' : 'Jet $p_{T}$ [GeV]',
+    'jetEta' : 'Jet $\\eta$',
+    'jetPhi' : 'Jet $\\phi$',
+    'pt_over_jetPt' : '$p_{T} / p_{T}^{jet}$',
+}
+
+logxs = {
+    'pt' : True,
+    'eta' : False,
+    'phi'  : False,
+    'nConstituents' : False,
+    'nPassingParts' : False,
+    'passLooseB' : False,
+    'passMediumB' : False,
+    'passTightB' : False,
+    'nTrueInt' : False,
+    'rho' : False,
+    'MET' : True,
+    'numLooseB' : False,
+    'numMediumB' : False,
+    'numTightB' : False,
+    'numJets' : False,
+    'Zpt' : True,
+    'Zy' : False,
+    'Zmass' : False,
+    'leadMuPt' : True,
+    'leadMuEta' : False,
+    'leadMuCharge' : False,
+    'subMuPt' : True,
+    'subMuEta' : False,
+    'subMuCharge' : False,
+    'pdgid' : False,
+    'charge' : False,
+    'dxy' : False,
+    'dz' : False,
+    'puppiWeight' : False,
+    'fromPV' : False,
+    'jetPt' : True,
+    'jetEta' : False,
+    'jetPhi' : False,
+    'pt_over_jetPt' : True,
+}
+
+logys = {
+    'pt' : True,
+    'eta' : False,
+    'phi'  : False,
+    'nConstituents' : True,
+    'nPassingParts' : True,
+    'passLooseB' : True,
+    'passMediumB' : True,
+    'passTightB' : True,
+    'nTrueInt' : True,
+    'rho' : True,
+    'MET' : True,
+    'numLooseB' : True,
+    'numMediumB' : True,
+    'numTightB' : True,
+    'numJets' : True,
+    'Zpt' : True,
+    'Zy' : True,
+    'Zmass' : True,
+    'leadMuPt' : True,
+    'leadMuEta' : True,
+    'leadMuCharge' : False,
+    'subMuPt' : True,
+    'subMuEta' : True,
+    'subMuCharge' : False,
+    'pdgid' : True,
+    'charge' : True,
+    'dxy' : True,
+    'dz' : True,
+    'puppiWeight' : True,
+    'fromPV' : True,
+    'jetPt' : True,
+    'jetEta' : True,
+    'jetPhi' : True,
+    'pt_over_jetPt' : True,
+}
+
+class KinPlotManager:
+    def __init__(self):
+        self.dfs_MC = []
+        self.labels_MC = []
+        self.dfs_data = None
+
+    def add_MC(self, df, label):
+        self.dfs_MC.append(df)
+        self.labels_MC.append(label)
+
+    def add_data(self, df):
+        if self.dfs_data is None:
+            self.dfs_data = [df]
+        else:
+            self.dfs_data.append(df)
+
+    def plot_variable(self, toplot,
+                      weightsyst='nominal', 
+                      pulls=False, density=True):
+        if type(toplot) is str:
+            logx = logxs[toplot]
+            logy = logys[toplot]
+            xlabel = xlabels[toplot]
+        elif type(toplot) is Variable:
+            logx = logxs[toplot.name]
+            logy = logys[toplot.name]
+            xlabel = xlabels[toplot.name]
+        elif type(toplot) is Ratio:
+            thename = "%s_over_%s"%(toplot.num, toplot.denom)
+            logx = logxs[thename]
+            logy = logys[thename]
+            xlabel = xlabels[thename]
+
+        plot_variable(self.dfs_data, self.dfs_MC, self.labels_MC,
+                      toplot, logx, logy, xlabel,
+                      weightsyst=weightsyst,
+                      pulls=pulls, density=density)
+
+
+class Variable:
+    def __init__(self, name):
+        self.name = name
+
+    @property
+    def columns(self):
+        return [self.name]
+
+    def evaluate(self, x):
+        return x
+    
+
+class Ratio:
+    def __init__(self, num, denom):
+        self.num = num
+        self.denom = denom
+
+    @property
+    def columns(self):
+        return [self.num, self.denom]
+
+    def evaluate(self, x, y):
+        return x.to_numpy()/y.to_numpy()
+
+def plot_variable(dfs_data, dfs_MC, labels_MC, 
+                  toplot, logx, logy, xlabel,
+                  weightsyst='nominal',
+                  pulls=False, density=True):
+
+    if type(toplot) is str:
+        toplot = Variable(toplot)
+
+    if dfs_data is None:
+        DO_DATA = False
+    else:
+        DO_DATA = True
+        if type(dfs_data) not in [list,tuple]:
+            dfs_data = [dfs_data]
+
+    if type(dfs_MC) not in [list,tuple]:
+        dfs_MC = [dfs_MC]
+        labels_MC = [labels_MC]
+
+    tables_MC = []
+    for df in dfs_MC:
+        tables_MC.append(
+            df.to_table(columns=[*toplot.columns, 'evtwt_%s'%weightsyst])
+        )
+
+    if DO_DATA:
+        tables_data = []
+        for df in dfs_data:
+            tables_data.append(
+                df.to_table(columns=[*toplot.columns, 'evtwt_%s'%weightsyst])
+            )
+
+
+    vals_MC = []
+    for table in tables_MC:
+        toeval = [table[column] for column in toplot.columns]
+        vals_MC.append(toplot.evaluate(*toeval))
+
+    minvals_MC = [np.min(val) for val in vals_MC]
+    maxvals_MC = [np.max(val) for val in vals_MC]
+
+    minval = np.min(minvals_MC)
+    maxval = np.max(maxvals_MC)
+
+    if DO_DATA:
+        vals_data = []
+        for table in tables_data:
+            toeval = [table[column] for column in toplot.columns]
+            vals_data.append(toplot.evaluate(*toeval))
+
+        minvals_data = [np.min(val) for val in vals_data]
+        maxvals_data = [np.max(val) for val in vals_data]
+
+        minval = np.min([minval, *minvals_data])
+        maxval = np.max([maxval, *maxvals_data])
+
+    if type(toplot) != Variable:
+        theax = hist.axis.Regular(
+            100, minval, maxval, 
+            transform=hist.axis.transform.log if logx else None
+        )
+
+    else:
+        dtype = tables_MC[0][toplot.columns[0]].type
+        if dtype in [pa.float16(), pa.float32(), pa.float64()]:
+            theax = hist.axis.Regular(
+                100, minval, maxval, 
+                transform=hist.axis.transform.log if logx else None
+            )
+        elif dtype in [pa.bool_(), pa.uint8(), pa.uint16(), pa.uint32(), pa.uint64(), pa.int8(), pa.int16(), pa.int32(), pa.int64()]:
+            theax = hist.axis.Integer(minval, maxval+1)
+            if logx:
+                raise ValueError("logx is not supported for integer axes")
+        else:
+            raise ValueError("Unsupported column type: %s" % dtype)
+
+    H = hist.Hist(
+        theax,
+        hist.axis.StrCategory([], name='label', growth=True),
+        storage=hist.storage.Weight(),
+    )
+
+    for val, table, label in zip(vals_MC, tables_MC, labels_MC):
+        H.fill(
+            val,
+            weight=table['evtwt_%s'%weightsyst],
+            label=label,
+        )
+
+    if DO_DATA:
+        for val, table in zip(vals_data, tables_data):
+            H.fill(
+                val,
+                weight=table['evtwt_%s'%weightsyst],
+                label='DATA'
+            )
+
+    fig = plt.figure(figsize=(12, 12))
+    try:
+        (ax_main, ax_ratio) = fig.subplots(2, 1, sharex=True, height_ratios=(1, 0.5))
+
+        mainlines = {}
+        for label in labels_MC:
+            mainlines[label] = simon_histplot(
+                                    H[{'label' : label}], 
+                                    density=density, 
+                                    label=label, ax=ax_main
+                                ) 
+
+        if DO_DATA:
+            mainlines['DATA'] = simon_histplot(
+                                    H[{'label' : 'DATA'}], 
+                                    density=density, 
+                                    label='DATA', c='k', ax=ax_main
+                                ) 
+
+        if logx:
+            ax_main.set_xscale('log')
+        if logy:
+            ax_main.set_yscale('log')
+
+        if density:
+            ax_main.set_ylabel('Counts [denstiy]')
+        else:
+            ax_main.set_ylabel('Counts [a.u.]')
+
+        ax_main.legend()
+
+        if DO_DATA:
+            for label in labels_MC:
+                simon_histplot_ratio(
+                    H[{'label' : 'DATA'}],
+                    H[{'label' : label}],
+                    density=density, ax=ax_ratio,
+                    label=label,
+                    color=mainlines[label][0].get_color(),
+                    pulls=pulls,
+                )
+            if pulls:
+                ax_ratio.set_ylabel("DATA/MC [pulls]")
+            else:
+                ax_ratio.set_ylabel("DATA/MC")
+
+        else:
+            nom = labels_MC[0]
+            for label in labels_MC[1:]:
+                simon_histplot_ratio(
+                    H[{'label' : nom}],
+                    H[{'label' : label}],
+                    density=density, ax=ax_ratio,
+                    label=label
+                )
+            if pulls:
+                ax_ratio.set_ylabel("%s/MC [pulls]"%nom)
+            else:
+                ax_ratio.set_ylabel("%s/MC"%nom)
+
+        ax_ratio.set_xlabel(xlabel)
+
+        ax_ratio.axhline(1, color='black', linestyle='--')
+
+        #the automatic axis ranges bug out for some reason
+        #so we set them manually
+        if not logx:
+            if maxval.dtype == np.bool_:
+                axrange = 1
+            else:
+                axrange = maxval - minval
+            padded_range = axrange * 1.05
+            axcenter = (minval + maxval) / 2
+            newmin = axcenter - padded_range / 2
+            newmax = axcenter + padded_range / 2
+            ax_main.set_xlim(newmin, newmax)
+        else:
+            ax_main.set_xlim(0.95*minval, 1.05*maxval)
+
+        plt.tight_layout()
+        plt.subplots_adjust(wspace=0, hspace=0)
+
+        plt.show()
+    finally:
+        plt.close(fig)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 from util import setup_ratiopad_canvas, setup_plain_canvas, get_ax_edges, has_overflow, has_underflow, should_logx, should_logy, setup_cbar_canvas, get_ax_label, get_hist, get_color, get_label, get_lumi, get_xsec, order_by_jet_yield, savefig
 
