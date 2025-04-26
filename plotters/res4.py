@@ -2,14 +2,17 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm, Normalize
 import numpy as np
 import awkward as ak
-import util
 import fitfuncs
 from scipy.optimize import curve_fit
 import contextlib
+import mplhep as hep
+from scipy.special import erf
 
 RLedges = np.linspace(0, 1.0, 11)
+RLedges = np.asarray([0, RLedges[3], RLedges[4], RLedges[5], RLedges[6], 1])
 
 redges_teedipole = np.linspace(0, 1.0, 21)
+redges_teedipole = np.asarray([0, *redges_teedipole[1::2], 1])
 ctedges_teedipole = np.linspace(0, np.pi/2, 21)
 
 redges_triangle = np.linspace(0, 1.0, 21)
@@ -17,6 +20,12 @@ ctedges_triangle = np.linspace(0, 2*np.pi, 31)
 
 area_teedipole = 0.5 * (redges_teedipole[1:]**2 - redges_teedipole[:-1]**2)[:, None] \
                      * (ctedges_teedipole[1:] - ctedges_teedipole[:-1])[None, :]
+
+plt.style.use(hep.style.CMS)
+
+import json
+with open('config.json', 'r') as f:
+    config = json.load(f)
 
 def compute_flux(H, RLbin, ptbin, iToy,
                  jacobian=True,
@@ -62,19 +71,67 @@ def compute_angular_fluctuation(H, RLbin, ptbin, iToy,
 def compute_differnce(H1, H2, RLbin, ptbin, iToy,
                       jacobian=True,
                       normalize=True,
-                      relative=False):
-    flux1 = compute_flux(H1, RLbin, ptbin, iToy,
-                         jacobian=jacobian,
-                         normalize=normalize)
-
-    flux2 = compute_flux(H2, RLbin, ptbin, iToy,
-                         jacobian=jacobian,
-                         normalize=normalize)
+                      relative=False,
+                      what='flux'):
+    if what == 'flux':
+        flux1 = compute_flux(H1, RLbin, ptbin, iToy,
+                             jacobian=jacobian,
+                             normalize=normalize)
+        flux2 = compute_flux(H2, RLbin, ptbin, iToy,
+                             jacobian=jacobian,
+                             normalize=normalize)
+    elif what == 'angular_avg':
+        flux1 = compute_angular_average(H1, RLbin, ptbin, iToy,
+                                        jacobian=jacobian,
+                                        normalize=normalize)
+        flux2 = compute_angular_average(H2, RLbin, ptbin, iToy,
+                                        jacobian=jacobian,
+                                        normalize=normalize)
+    elif what == 'angular_fluctuation':
+        flux1 = compute_angular_fluctuation(H1, RLbin, ptbin, iToy,
+                                            jacobian=jacobian,
+                                            normalize=normalize)
+        flux2 = compute_angular_fluctuation(H2, RLbin, ptbin, iToy,
+                                            jacobian=jacobian,
+                                            normalize=normalize)
+    else:
+        raise ValueError("Invalid what: %s" % what)
 
     if relative:
         return np.nan_to_num((flux2 - flux1)/flux1)
     else:
         return flux2 - flux1
+
+def compute_ratio(H1, H2, RLbin, ptbin, iToy,
+                  jacobian=True,
+                  normalize=True,
+                  what='flux'):
+
+    if what == 'flux':
+        flux1 = compute_flux(H1, RLbin, ptbin, iToy,
+                             jacobian=jacobian,
+                             normalize=normalize)
+        flux2 = compute_flux(H2, RLbin, ptbin, iToy,
+                             jacobian=jacobian,
+                             normalize=normalize)
+    elif what == 'angular_avg':
+        flux1 = compute_angular_average(H1, RLbin, ptbin, iToy,
+                                        jacobian=jacobian,
+                                        normalize=normalize)
+        flux2 = compute_angular_average(H2, RLbin, ptbin, iToy,
+                                        jacobian=jacobian,
+                                        normalize=normalize)
+    elif what == 'angular_fluctuation':
+        flux1 = compute_angular_fluctuation(H1, RLbin, ptbin, iToy,
+                                            jacobian=jacobian,
+                                            normalize=normalize)
+        flux2 = compute_angular_fluctuation(H2, RLbin, ptbin, iToy,
+                                            jacobian=jacobian,
+                                            normalize=normalize)
+    else:
+        raise ValueError("Invalid what: %s" % what)
+
+    return np.nan_to_num(flux2/flux1)
 
 def errs_from_toys(fluxfunc, pulls=False, **kwargs):
 
@@ -142,11 +199,24 @@ def angular_fluctuation_vals_errs(H, RLbin, ptbin,
                           normalize=normalize,
                           pulls=pulls)
 
+def unc_vals_errs(H, RLbin, ptbin,
+                  jacobian=True,
+                  normalize=True,
+                  relative=False):
+    val, err = flux_vals_errs(H, RLbin, ptbin,
+                              normalize=normalize,
+                              jacobian=jacobian)
+    if relative:
+        return err/val, np.zeros_like(err)
+    else:
+        return err, np.zeros_like(err)
+        
 def difference_vals_errs(H1, H2, RLbin, ptbin,
                          jacobian=True,
                          normalize=True,
                          pulls=False,
-                         relative=False):
+                         relative=False,
+                         what='flux'):
     return errs_from_toys(compute_differnce,
                           H1=H1,
                           H2=H2,
@@ -155,7 +225,21 @@ def difference_vals_errs(H1, H2, RLbin, ptbin,
                           jacobian=jacobian,
                           normalize=normalize,
                           pulls=pulls,
-                          relative=relative)
+                          relative=relative,
+                          what=what)
+
+def ratio_vals_errs(H1, H2, RLbin, ptbin,
+                    jacobian=True,
+                    normalize=True,
+                    what='flux'):
+    return errs_from_toys(compute_ratio,
+                          H1=H1,
+                          H2=H2,
+                          RLbin=RLbin,
+                          ptbin=ptbin,
+                          jacobian=jacobian,
+                          normalize=normalize,
+                          what=what)
 
 def plot_flux_2d(H, RLbin, ptbin,
                  jacobian=True,
@@ -168,9 +252,10 @@ def plot_flux_2d(H, RLbin, ptbin,
 
     ptedges = H.axes['pt'].edges
 
-    fig = plt.figure(figsize=(12, 12))
+    fig = plt.figure(figsize=config['Figure_Size'])
     try:
         ax = fig.add_subplot(111, projection='polar')
+        hep.cms.label(ax=ax, data=False, label=config['Approval_Text'], pad=0.05)
         if logz:
             norm = LogNorm(vmin=flux[flux>0].min(), vmax=flux.max())
         else:
@@ -199,8 +284,18 @@ def plot_flux_2d(H, RLbin, ptbin,
 
         plt.colorbar(pc1, ax=ax)
 
-        fig.suptitle("%0.1f < RL < %0.1f\n%0.0f < pT < %0.0f" % (RLedges[RLbin-1], RLedges[RLbin], ptedges[ptbin], ptedges[ptbin+1]))
+        thetext = "%0.1f < RL < %0.1f\n%0.0f < pT < %0.0f" % (RLedges[RLbin-1], RLedges[RLbin], ptedges[ptbin], ptedges[ptbin+1])
+        ax.text(0.1, 0.8, thetext, 
+                horizontalalignment='center',
+                verticalalignment='bottom',
+                transform=ax.transAxes,
+                fontsize=24,
+                bbox=dict(boxstyle="round,pad=0.3", 
+                          edgecolor='black', 
+                          facecolor='white')
+        )
 
+        plt.savefig("test.png", bbox_inches='tight')
         plt.tight_layout()
         plt.show()
     finally:
@@ -211,7 +306,7 @@ def plot_angular_avg(H, RLbin, ptbin,
                      normalize=True,
                      logx=False,
                      logy=True):
-    fig = plt.figure(figsize=(12, 12))
+    fig = plt.figure(figsize=config['Figure_Size'])
     try:
         val, err = angular_avg_vals_errs(H, RLbin, ptbin, 
                                          jacobian=jacobian,
@@ -244,9 +339,10 @@ def plot_angular_fluctuation_2d(H, RLbin, ptbin,
                                         jacobian=jacobian,
                                         normalize=normalize)
     ptedges = H.axes['pt'].edges
-    fig = plt.figure(figsize=(12, 12))
+    fig = plt.figure(figsize=config['Figure_Size'])
     try:
         ax = fig.add_subplot(111, projection='polar')
+        hep.cms.label(ax=ax, data=False, label=config['Approval_Text'], pad=0.05)
 
         d1 = flux-1
         maxvar = np.max(np.abs(d1))
@@ -275,7 +371,17 @@ def plot_angular_fluctuation_2d(H, RLbin, ptbin,
                             norm=norm)
         plt.colorbar(pc1, ax=ax)
 
-        fig.suptitle("%0.1f < RL < %0.1f\n%0.0f < pT < %0.0f" % (RLedges[RLbin-1], RLedges[RLbin], ptedges[ptbin], ptedges[ptbin+1]))
+        thetext = "%0.1f < RL < %0.1f\n%0.0f < pT < %0.0f" % (RLedges[RLbin-1], RLedges[RLbin], ptedges[ptbin], ptedges[ptbin+1])
+        ax.text(0.1, 0.8, thetext, 
+                horizontalalignment='center',
+                verticalalignment='bottom',
+                transform=ax.transAxes,
+                fontsize=24,
+                bbox=dict(boxstyle="round,pad=0.3", 
+                          edgecolor='black', 
+                          facecolor='white')
+        )
+
         plt.tight_layout()
         plt.show()
     finally:
@@ -285,7 +391,7 @@ def plot_angular_fluctuation_1d(H, RLbin, ptbin,
                                 jacobian=True,
                                 normalize=True,
                                 rstep=5):
-    fig = plt.figure(figsize=(12, 12))
+    fig = plt.figure(figsize=config['Figure_Size'])
     try:
         val, err = angular_fluctuation_vals_errs(H, RLbin, ptbin, 
                                                  jacobian=jacobian,
@@ -294,6 +400,7 @@ def plot_angular_fluctuation_1d(H, RLbin, ptbin,
         twidths = ctedges_teedipole[1:] - ctedges_teedipole[:-1]
 
         ax = fig.add_subplot(111)
+        hep.cms.label(ax=ax, data=False, label=config['Approval_Text'], pad=0.05)
         for i in range(0, val.shape[0], rstep):
             q = ax.errorbar(tmid, val[i],
                         xerr = twidths/2,
@@ -326,26 +433,242 @@ def plot_angular_fluctuation_1d(H, RLbin, ptbin,
     finally:
         plt.close(fig)
 
-def plot_diff(H1, H2, RLbin, ptbin,
-              jacobian=True, normalize=True,
-              pulls=False, relative=False,
-              plot2d=True, plotr1d=True, plotphi1d=True, plothist=True,
-              savefig=None, show=True):
+def compare_1d(H1, H2, 
+               label1, label2,
+               RLbin, ptbin,
+               jacobian=True, normalize=True, 
+               what = 'flux', shiftx=0,
+               r=0, c=0):
+
+    if what == 'flux':
+        val1, err1 = flux_vals_errs(H1, RLbin, ptbin,
+                                    jacobian=jacobian,
+                                    normalize=normalize)
+        val2, err2 = flux_vals_errs(H2, RLbin, ptbin,
+                                    jacobian=jacobian,
+                                    normalize=normalize)
+
+        ratio, ratioerr = ratio_vals_errs(H1, H2, RLbin, ptbin,
+                                          jacobian=jacobian,
+                                          normalize=normalize)
+
+    elif what == 'angular_avg':
+        val1, err1 = angular_avg_vals_errs(H1, RLbin, ptbin,
+                                           jacobian=jacobian,
+                                           normalize=normalize)
+        val2, err2 = angular_avg_vals_errs(H2, RLbin, ptbin,
+                                           jacobian=jacobian,
+                                           normalize=normalize)
+
+        ratio, ratioerr = ratio_vals_errs(H1, H2, RLbin, ptbin,
+                                          jacobian=jacobian,
+                                          normalize=normalize,
+                                          what='angular_avg')
+
+    elif what == 'angular_fluctuation':
+        val1, err1 = angular_fluctuation_vals_errs(H1, RLbin, ptbin,
+                                                   jacobian=jacobian,
+                                                   normalize=normalize)
+        val2, err2 = angular_fluctuation_vals_errs(H2, RLbin, ptbin,
+                                                   jacobian=jacobian,
+                                                   normalize=normalize)
+
+        ratio, ratioerr = ratio_vals_errs(H1, H2, RLbin, ptbin,
+                                          jacobian=jacobian,
+                                          normalize=normalize,
+                                          what='angular_fluctuation')
+    elif what == 'uncertainty':
+        val1, err1 = unc_vals_errs(H1, RLbin, ptbin,
+                                    jacobian=jacobian,
+                                    normalize=normalize,
+                                    relative=False)
+        val2, err2 = unc_vals_errs(H2, RLbin, ptbin,
+                                   jacobian=jacobian,
+                                   normalize=normalize,
+                                   relative=False)
+        
+        ratio = np.nan_to_num(val2/val1)
+        ratioerr = np.zeros_like(ratio)
+
+    elif what == 'relative_uncertainty':
+        val1, err1 = unc_vals_errs(H1, RLbin, ptbin,
+                                    jacobian=jacobian,
+                                    normalize=normalize,
+                                    relative=True)
+        val2, err2 = unc_vals_errs(H2, RLbin, ptbin,
+                                   jacobian=jacobian,
+                                   normalize=normalize,
+                                   relative=True)
+
+        ratio = np.nan_to_num(val2/val1)
+        ratioerr = np.zeros_like(ratio)
+    else:
+        raise ValueError("Invalid what: %s" % what)
+
+    if what != 'angular_fluctuation':
+        fig = plt.figure(figsize=config['Figure_Size'])
+        try:
+            (ax_main, ax_ratio) = fig.subplots(
+                    2, 1, sharex=True,
+                    height_ratios=(1, config['Ratiopad_Height'])
+            )
+            hep.cms.label(ax=ax_main, data=False, label=config['Approval_Text'])
+
+            rmid = (redges_teedipole[1:] + redges_teedipole[:-1])/2
+            rwidths = redges_teedipole[1:] - redges_teedipole[:-1]
+
+            if what == 'angular_avg':
+                ax_main.errorbar(rmid+shiftx*rwidths/4, val1,
+                                xerr = rwidths/2,
+                                yerr=err1,
+                                fmt='o', label=label1)
+                ax_main.errorbar(rmid-shiftx*rwidths/4, val2,
+                                xerr = rwidths/2,
+                                yerr=err2,
+                                fmt='o', label=label2)
+                ax_main.set_ylabel("Angular average flux")
+
+                ax_ratio.errorbar(rmid, ratio,
+                                xerr = rwidths/2,
+                                yerr=ratioerr,
+                                fmt='o', label='Ratio')
+            else:
+                phimin = ctedges_teedipole[c]
+                phimax = ctedges_teedipole[c+1]
+
+                phitext = ' - $%0.2f < \\phi < %0.2f$' % (phimin, phimax)
+                ax_main.errorbar(rmid+shiftx*rwidths/4, val1[:,c],
+                                xerr = rwidths/2,
+                                yerr=err1[:,c],
+                                fmt='o', 
+                                label=label1+phitext)
+                q = ax_main.errorbar(rmid-shiftx*rwidths/4, val2[:,c],
+                                xerr = rwidths/2,
+                                yerr=err2[:,c],
+                                fmt='o', 
+                                label=label2+phitext)
+
+                ax_ratio.errorbar(rmid, ratio[:,c],
+                                xerr = rwidths/2,
+                                yerr=ratioerr[:,c],
+                                fmt='o', label='Ratio',
+                                color = q[0].get_color())
+
+                if what == 'flux':
+                    ax_main.set_ylabel("Flux")
+                elif what == 'uncertainty':
+                    ax_main.set_ylabel("Uncertainty")
+                elif what == 'relative_uncertainty':
+                    ax_main.set_ylabel("Relative uncertainty")
+
+            ax_main.legend()
+
+            ax_ratio.axhline(1, color='black', linestyle='--')
+            ax_ratio.set_xlabel('r')
+            if what != 'relative_uncertainty':
+                ax_main.set_yscale('log')
+            ax_ratio.set_ylabel("%s / %s" % (label2, label1))
+
+            plt.tight_layout()
+            plt.subplots_adjust(hspace=0, wspace=0)
+
+            plt.show()
+        finally:
+            plt.close(fig)
+
+    if what != 'angular_avg':
+        fig = plt.figure(figsize=config['Figure_Size'])
+        try:
+            (ax_main, ax_ratio) = fig.subplots(
+                    2, 1, sharex=True,
+                    height_ratios=(1, config['Ratiopad_Height'])
+            )
+            hep.cms.label(ax=ax_main, data=False, label=config['Approval_Text'])
+
+            cmid = (ctedges_teedipole[1:] + ctedges_teedipole[:-1])/2
+            cwidths = ctedges_teedipole[1:] - ctedges_teedipole[:-1]
+
+            rmin = redges_teedipole[r]
+            rmax = redges_teedipole[r+1]
+
+            rtext = ' - $%0.2f < r < %0.2f$' % (rmin, rmax)
+
+            ax_main.errorbar(cmid+shiftx*cwidths/4, val1[r,:],
+                            xerr = cwidths/2,
+                            yerr=err1[r,:],
+                            fmt='o', 
+                            label=label1+rtext)
+            q = ax_main.errorbar(cmid-shiftx*cwidths/4, val2[r,:],
+                            xerr = cwidths/2,
+                            yerr=err2[r,:],
+                            fmt='o', 
+                            label=label2+rtext)
+
+            ax_ratio.errorbar(cmid, ratio[r,:],
+                            xerr = cwidths/2,
+                            yerr=ratioerr[r,:],
+                            fmt='o', label='Ratio',
+                            color = q[0].get_color())
+
+            ax_main.legend()
+
+            ax_ratio.axhline(1, color='black', linestyle='--')
+            ax_ratio.set_xlabel('$\\phi$')
+            ax_ratio.set_ylabel("%s / %s" % (label2, label1))
+
+            if what == 'flux':
+                ax_main.set_ylabel("Flux")
+            elif what == 'uncertainty':
+                ax_main.set_ylabel("Uncertainty")
+            elif what == 'relative_uncertainty':
+                ax_main.set_ylabel("Relative uncertainty")
+            elif what == 'angular_fluctuation':
+                ax_main.set_ylabel("Angular fluctuation")
+
+            plt.tight_layout()
+            plt.subplots_adjust(hspace=0, wspace=0)
+
+            plt.show()
+        finally:
+            plt.close(fig)
+
+
+
+def compare(H1, H2, RLbin, ptbin,
+            mode='diff',
+            jacobian=True, normalize=True,
+            plot2d=True, plotr1d=True, plotphi1d=True, plothist=True,
+            savefig=None, show=True):
+
     ptedges = H1.axes['pt'].edges
     if plot2d:
-        fig = plt.figure(figsize=(12, 12))
+        fig = plt.figure(figsize=config['Figure_Size'])
         try:
-            flux = compute_differnce(H1, H2, RLbin, ptbin, 0,
-                                      jacobian=jacobian,
-                                      normalize=normalize,
-                                      relative=relative)
+            if mode.startswith('diff'):
+                relative = mode.endswith('relative') or mode.endswith('pulls')
+                flux = compute_differnce(H1, H2, RLbin, ptbin, 0,
+                                          jacobian=jacobian,
+                                          normalize=normalize,
+                                          relative=relative)
+            elif mode == 'ratio':
+                flux = compute_ratio(H1, H2, RLbin, ptbin, 0,
+                                     jacobian=jacobian,
+                                     normalize=normalize)
+            else:
+                raise ValueError("Invalid mode: %s" % mode)
 
             ax = fig.add_subplot(111, projection='polar')
+            hep.cms.label(ax=ax, data=False, label=config['Approval_Text'], pad=0.05)
 
-            d1 = flux
-            maxvar = np.max(np.abs(d1))
+            if mode.startswith('diff'):
+                d1 = flux
+                maxvar = np.max(np.abs(d1))
 
-            norm = Normalize(vmin=-maxvar, vmax=maxvar)
+                norm = Normalize(vmin=-maxvar, vmax=maxvar)
+            elif mode == 'ratio':
+                d1 = flux - 1
+                maxvar = np.max(np.abs(d1))
+                norm = Normalize(vmin=1-maxvar, vmax=1+maxvar)
 
             pc1 = ax.pcolormesh(ctedges_teedipole, redges_teedipole,
                                 flux,
@@ -369,12 +692,24 @@ def plot_diff(H1, H2, RLbin, ptbin,
                                 norm=norm)
             cb = plt.colorbar(pc1, ax=ax)
 
-            if relative:
-                cb.set_label('Relative difference')
-            else:
-                cb.set_label('Difference')
+            if mode.startswith('difference'):
+                if relative:
+                    cb.set_label('Relative difference')
+                else:
+                    cb.set_label('Difference')
+            elif mode =='ratio':
+                cb.set_label('Ratio')
 
-            fig.suptitle("%0.1f < RL < %0.1f\n%0.0f < pT < %0.0f" % (RLedges[RLbin-1], RLedges[RLbin], ptedges[ptbin], ptedges[ptbin+1]))
+            thetext = "%0.1f < RL < %0.1f\n%0.0f < pT < %0.0f" % (RLedges[RLbin-1], RLedges[RLbin], ptedges[ptbin], ptedges[ptbin+1])
+            ax.text(0.1, 0.8, thetext, 
+                    horizontalalignment='center',
+                    verticalalignment='bottom',
+                    transform=ax.transAxes,
+                    fontsize=24,
+                    bbox=dict(boxstyle="round,pad=0.3", 
+                              edgecolor='black', 
+                              facecolor='white')
+            )
             plt.tight_layout()
 
             if savefig is not None:
@@ -385,25 +720,34 @@ def plot_diff(H1, H2, RLbin, ptbin,
             plt.close(fig)
 
     if plotr1d or plotphi1d:
-        val, err = difference_vals_errs(H1, H2, RLbin, ptbin,
-                                        jacobian=jacobian,
-                                        normalize=normalize,
-                                        pulls=pulls,
-                                        relative=relative)
+        if mode.startswith('diff'):
+            pulls = mode.endswith('pulls')
+            relative = pulls or mode.endswith('relative')
+
+            val, err = difference_vals_errs(H1, H2, RLbin, ptbin,
+                                            jacobian=jacobian,
+                                            normalize=normalize,
+                                            pulls=pulls,
+                                            relative=relative)
+        elif mode == 'ratio':
+            val, err = ratio_vals_errs(H1, H2, RLbin, ptbin,
+                                       jacobian=jacobian,
+                                       normalize=normalize)
 
     if plotr1d:
-        fig = plt.figure(figsize=(12, 6))
+        fig = plt.figure(figsize=config['Figure_Size'])
         try:
             rmid = (redges_teedipole[1:] + redges_teedipole[:-1])/2
             rwidths = redges_teedipole[1:] - redges_teedipole[:-1]
 
             rmid_b = np.broadcast_to(rmid[:, None], val.shape)
-            rwidths_b = np.broadcast_to(rwidths[None, :], val.shape)
+            rwidths_b = np.broadcast_to(rwidths[:, None], val.shape)
 
             ctmid = (ctedges_teedipole[1:] + ctedges_teedipole[:-1])/2
             cmap = plt.get_cmap('Reds')
 
             ax = fig.add_subplot(111)
+            hep.cms.label(ax=ax, data=False, label=config['Approval_Text'], pad=0.05)
 
             for i in range(val.shape[1]):
                 jitter = ((-val.shape[1]/2 + i)/val.shape[1]) * rwidths/3
@@ -415,14 +759,18 @@ def plot_diff(H1, H2, RLbin, ptbin,
                             fmt='o')
             ax.set_xlabel('r')
 
-            if pulls:
-                ax.set_ylabel('Pulls')
-            elif relative:
-                ax.set_ylabel('Relative difference')
-            else:
-                ax.set_ylabel('Difference')
+            if mode.startswith('diff'):
+                ax.axhline(0, color='black', linestyle='--')
+                if pulls:
+                    ax.set_ylabel('Pulls')
+                elif relative:
+                    ax.set_ylabel('Relative difference')
+                else:
+                    ax.set_ylabel('Difference')
+            elif mode == 'ratio':
+                ax.set_ylabel('Ratio')
+                ax.axhline(1, color='black', linestyle='--')
 
-            ax.axhline(0, color='black', linestyle='--')
 
             plt.tight_layout()
             if savefig is not None:
@@ -433,13 +781,13 @@ def plot_diff(H1, H2, RLbin, ptbin,
             plt.close(fig)
 
     if plotphi1d:
-        fig = plt.figure(figsize=(12, 6))
+        fig = plt.figure(figsize=config['Figure_Size'])
         try:
             tmid = (ctedges_teedipole[1:] + ctedges_teedipole[:-1])/2
             twidths = ctedges_teedipole[1:] - ctedges_teedipole[:-1]
 
             tmid_b = np.broadcast_to(tmid[None, :], val.shape)
-            twidths_b = np.broadcast_to(twidths[:, None], val.shape)
+            twidths_b = np.broadcast_to(twidths[None, :], val.shape)
 
             jitter = np.random.uniform(-twidths/5, twidths/5, size=tmid_b.shape)
             rmid_b = np.broadcast_to(rmid[:, None], val.shape)
@@ -447,6 +795,8 @@ def plot_diff(H1, H2, RLbin, ptbin,
             colors = cmap(rmid_b.ravel())
 
             ax = fig.add_subplot(111)
+            hep.cms.label(ax=ax, data=False, label=config['Approval_Text'], pad=0.05)
+
             for i in range(val.shape[0]):
                 jitter = ((-val.shape[0]/2 + i)/val.shape[0]) * twidths/3
                 ax.errorbar(tmid_b[i]+jitter, val[i],
@@ -455,14 +805,18 @@ def plot_diff(H1, H2, RLbin, ptbin,
                             color=cmap(rmid[i]/rmid.max()),
                             fmt='o')
             ax.set_xlabel('$\\phi$')
-            if pulls:
-                ax.set_ylabel('Pulls')
-            elif relative:
-                ax.set_ylabel('Relative difference')
-            else:
-                ax.set_ylabel('Difference')
+            if mode.startswith('diff'):
+                ax.axhline(0, color='black', linestyle='--')
+                if pulls:
+                    ax.set_ylabel('Pulls')
+                elif relative:
+                    ax.set_ylabel('Relative difference')
+                else:
+                    ax.set_ylabel('Difference')
+            elif mode == 'ratio':
+                ax.set_ylabel('Ratio')
+                ax.axhline(1, color='black', linestyle='--')
 
-            ax.axhline(0, color='black', linestyle='--')
 
             plt.tight_layout()
             if savefig is not None:
@@ -473,18 +827,25 @@ def plot_diff(H1, H2, RLbin, ptbin,
             plt.close(fig)
 
     if plothist:
-        fig = plt.figure(figsize=(12, 12))
+        fig = plt.figure(figsize=config['Figure_Size'])
         try:
             ax = fig.add_subplot(111)
+            hep.cms.label(ax=ax, data=False, label=config['Approval_Text'], pad=0.05)
+
             ax.hist(val.ravel(), bins=21, histtype='step')
-            if pulls:
-                ax.set_xlabel('Pulls')
-            elif relative:
-                ax.set_xlabel('Relative difference')
-            else:
-                ax.set_xlabel('Difference')
+            if mode.startswith('diff'):
+                ax.axvline(0, color='black', linestyle='--')
+                if pulls:
+                    ax.set_xlabel('Pulls')
+                elif relative:
+                    ax.set_xlabel('Relative difference')
+                else:
+                    ax.set_xlabel('Difference')
+            elif mode == 'ratio':
+                ax.set_xlabel('Ratio')
+                ax.axvline(1, color='black', linestyle='--')
+
             ax.set_ylabel('Counts')
-            ax.axvline(0, color='black', linestyle='--')
 
             plt.tight_layout()
             if savefig is not None:
@@ -499,7 +860,8 @@ def model_background(arr, totalname, backgroundname_l, label_l,
                      triangle=False,
                      whichfit='Linear'):
 
-    fig, ((ax0, ax1), (ax2, ax3)) = plt.subplots(2,2, figsize=(16,12))
+    fig, ((ax0, ax1), (ax2, ax3)) = plt.subplots(2,2, figsize=config['Figure_Size'])
+    hep.cms.label(ax=ax0, data=False, label=config['Approval_Text'], pad=0.05)
 
     total_nom = compute_shape(arr[totalname], 
                               btag, ptbin, RLbin, 0,
@@ -619,4 +981,179 @@ def model_background(arr, totalname, backgroundname_l, label_l,
     ax3.axhline(0, color='red', linestyle='--')
 
     plt.tight_layout()
+    plt.show()
+
+def plot_transfer_2d(Htransfer, wrt, cuts={}):
+    cuts_transfer = {}
+    for key in cuts.keys():
+        cuts_transfer[key+"_reco"] = cuts[key]
+        cuts_transfer[key+"_gen"] = cuts[key]
+
+    transfer = Htransfer[cuts_transfer].project(wrt+'_reco', wrt+'_gen')
+
+    transfer = transfer.values(flow=True)
+    denom = transfer.sum(axis=0)
+    transfer = transfer/denom[None, :]
+
+    plt.xlabel(wrt+'_gen')
+    plt.ylabel(wrt+'_reco')
+
+    plt.pcolormesh(transfer, cmap="Reds", norm=LogNorm())
+    plt.colorbar()
+    plt.show()
+
+def guassian_angle_smearing(phi_left, phi_right, mu, sigma, mask):
+    z_left = (phi_left - mu)/sigma
+    z_right = (phi_right - mu)/sigma
+    cdf = 0.5 * (erf(z_right) - erf(z_left))
+
+    #key point is that the angle wraps around
+    #to stay in the first quadrant
+    #lets add on the contribution from the second and fourth quadrants
+    phi_left4 = -phi_left
+    phi_right4 = -phi_right
+    z_left4 = (phi_left4 - mu)/sigma
+    z_right4 = (phi_right4 - mu)/sigma
+    cdf += 0.5 * (erf(z_right4) - erf(z_left4))
+
+    phi_left2 = np.pi - phi_left
+    phi_right2 = np.pi - phi_right
+    z_left2 = (phi_left2 - mu)/sigma    
+    z_right2 = (phi_right2 - mu)/sigma
+    cdf += 0.5 * (erf(z_right2) - erf(z_left2))
+
+    return (cdf/np.sum(cdf))[mask]
+
+def parameterized_func(Nbins, mu, mask):
+    edges = np.linspace(0, np.pi/2, Nbins+1)
+    left = edges[:-1]
+    right = edges[1:]
+    return lambda sigma: guassian_angle_smearing(left, right, mu, sigma, mask)
+
+def c_fitfunc(sigma, funcs, ys):
+    err2 = 0
+    for func, y in zip(funcs, ys):
+        err2 += np.sum(np.square(func(sigma) - y))
+    return err2
+
+def make_c_fitfunc(Nbins, y2d):
+    thefuncs =[]
+    ys = []
+    for i in range(Nbins):
+        mu = (i + 0.5) / ( (2/np.pi) * Nbins)
+        mask = y2d[:, i] > 1e-4
+        thefuncs.append(parameterized_func(Nbins, mu, mask))
+        ys.append(y2d[mask, i])
+
+    return lambda sigma: c_fitfunc(sigma, thefuncs, ys)
+
+def fit_c(Htransfer, pt, R, r, gen):
+    cuts_transfer = {
+        'pt_reco' : pt,
+        'R_reco' : R,
+        'r_reco' : r,
+        'pt_gen' : pt,
+        'R_gen' : R,
+        'r_gen' : r
+    }
+
+    transfer = Htransfer[cuts_transfer].project('c_reco', 'c_gen')
+    transfer = transfer.values(flow=True)
+
+    if gen:
+        denom = transfer.sum(axis=0)
+        transfer = transfer/denom[None, :]
+    else:
+        denom = transfer.sum(axis=1)
+        transfer = transfer/denom[:, None]
+        transfer = transfer.T
+
+    fitfunc = make_c_fitfunc(transfer.shape[1], transfer)
+    import scipy.optimize as opt
+    
+    sigma_guess = 0.1
+    sigma_bounds = (0, 1)
+
+    res = opt.minimize(
+        fitfunc,
+        sigma_guess,
+        bounds=[sigma_bounds],
+        method='L-BFGS-B'
+    )
+    print(res)
+
+    for i in range(0,transfer.shape[1],2):
+        plot_transfer_1d(Htransfer, 'c', i, gen, {'R' : R, 'r' : r, 'pt' : pt}, show=False)
+        mu = (i + 0.5) / ( (2/np.pi) * transfer.shape[1])
+        mask = transfer[:, i] > 1e-3
+        plotfunc = parameterized_func(transfer.shape[1], mu, mask)
+        x = np.arange(transfer.shape[1])[mask]
+        y = plotfunc(res.x[0]+0.03)
+        plt.errorbar(x, y, xerr=0.5, fmt='o', label='fit')
+        print(i)
+        print(x)
+        print(y)
+        print(res.x[0])
+    plt.show()
+
+def plot_transfer_1d(Htransfer, wrt, thebin, gen, cuts={},
+                     show=True):
+    cuts_transfer = {}
+    for key in cuts.keys():
+        cuts_transfer[key+"_reco"] = cuts[key]
+        cuts_transfer[key+"_gen"] = cuts[key]
+
+    transfer = Htransfer[cuts_transfer].project(wrt+'_reco', wrt+'_gen')
+
+    transfer = transfer.values(flow=True)
+
+    if gen:
+        denom = transfer.sum(axis=0)
+        transfer = transfer/denom[None, :]
+
+        toplot_x = np.arange(transfer.shape[0]+1) -0.5
+        toplot_y = transfer[:, thebin]
+
+        plt.xlabel(wrt+'_gen')
+    else:
+        denom = transfer.sum(axis=1)
+        transfer = transfer/denom[:, None]
+
+        toplot_x = np.arange(transfer.shape[1]+1) -0.5
+        toplot_y = transfer[thebin, :]
+
+        plt.xlabel(wrt+'_reco')
+
+    plt.stairs(toplot_y, toplot_x)
+    plt.ylabel('Transfer')
+    plt.axvline(thebin, color='red', linestyle='--')
+
+    if show:
+        plt.show()
+
+def plot_purity_stability(Htransfer, wrt, cuts):
+    cuts_transfer = {}
+    for key in cuts.keys():
+        cuts_transfer[key+"_reco"] = cuts[key]
+        cuts_transfer[key+"_gen"] = cuts[key]
+
+    transfer = Htransfer[cuts_transfer].project(wrt+'_reco', wrt+'_gen')
+
+    transfer = transfer.values(flow=True)
+
+    denom1 = transfer.sum(axis=0)
+    purity = np.diag(transfer/denom1[None, :])
+
+    denom2 = transfer.sum(axis=1)
+    stability = np.diag(transfer/denom2[:, None])
+
+    x = np.arange(transfer.shape[0])
+
+    plt.errorbar(x, purity, yerr=0, xerr = 0.5, label='Purity', fmt='o')
+    plt.errorbar(x, stability, yerr=0, xerr = 0.5, label='Stability', fmt='o')
+    plt.xlabel(wrt)
+    plt.ylabel('Purity/Stability')
+    plt.axhline(1, color='red', linestyle='--')
+    plt.ylim(0, 1.1)
+    plt.legend()
     plt.show()
