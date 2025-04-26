@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import os
 import os.path
 import numpy as np
 import mplhep as hep
@@ -34,6 +35,10 @@ class Variable:
 
     def evaluate(self, table):
         return table[self.name].to_numpy()
+
+    @property
+    def key(self):
+        return self.name
     
 class Ratio:
     def __init__(self, num, denom):
@@ -47,6 +52,10 @@ class Ratio:
     def evaluate(self, table):
         return table[self.num].to_numpy()/table[self.denom].to_numpy()
 
+    @property
+    def key(self):
+        return "%s_over_%s"%(self.num, self.denom)
+
 class Product:
     def __init__(self, var1, var2):
         self.var1 = var1
@@ -59,6 +68,10 @@ class Product:
     def evaluate(self, table):
         return table[self.var1].to_numpy() * table[self.var2].to_numpy()
 
+    @property
+    def key(self):
+        return "%s_times_%s"%(self.var1, self.var2)
+
 class NoCut:
     def __init__(self):
         pass
@@ -69,6 +82,10 @@ class NoCut:
 
     def evaluate(self, table):
         return np.ones(table.num_rows, dtype=bool)
+
+    @property
+    def key(self):
+        return "none"
 
 class TwoSidedCut:
     def __init__(self, variable, low, high):
@@ -90,6 +107,10 @@ class TwoSidedCut:
             ev < self.high
         )
 
+    @property
+    def key(self):
+        return "%sLT%gGT%g"%(self.variable.name, self.high, self.low)
+
 class GreaterThanCut:
     def __init__(self, variable, value):
         self.value = value
@@ -105,6 +126,10 @@ class GreaterThanCut:
     def evaluate(self, table):
         ev = self.variable.evaluate(table)
         return ev >= self.value
+
+    @property
+    def key(self):
+        return "%sGT%g"%(self.variable.name, self.value)
 
 class LessThanCut:
     def __init__(self, variable, value):
@@ -122,25 +147,112 @@ class LessThanCut:
         ev = self.variable.evaluate(table)
         return ev < self.value
 
+    @property
+    def key(self):
+        return "%sLT%g"%(self.variable.name, self.value)
+
+class PlottableDataset:
+    def __init__(df, label, xsec, numevts, color):
+        self.df = df
+        self.label = label
+        self.xsec = xsec
+        self.numevts = numevts
+        self.color = color
+
+    def evaluate_table(self, toplot, cut, weighting):
+        needed_columns = list(set(toplot.columns +
+                                  cut.columns +
+                                  weighting.columns))
+
+        self.table = self.df.to_table(columns=needed_columns)
+
+        self.mask = cut.evaluate(self.table)
+        self.vals = toplot.evaluate(self.table)[self.mask]
+        self.wts = weighting.evaluate(self.table)[self.mask]
+
+        self.minval = ak.min(self.vals)
+        self.maxval = ak.max(self.vals)
+
+    def set_samplewt_MC(self, total_lumi):
+        self.samplewt = total_lumi * self.xsec / 1000
+        self.samplewt /= self.numevts
+
+    def set_samplewt_data(self):
+        self.samplewt = 1.0
+
+    def plot(self, global_min, global_max, nbins, logx, density, ax):
+        if self.vals.dtype in [np.bool_, np.int16, np.int32, np.int64,
+                               np.uint16, np.uint32, np.uint64]:
+
+            theax = hist.axis.Integer(global_min, global_max+1)
+            if logx:
+                raise ValueError("logx is not supported for integer axes")
+        else:
+            theax = hist.axis.Regular(
+                    nbins, global_min, global_max,
+                    transform=hist.axis.transform.log if logx else None
+            )
+        self.H = hist.Hist(
+            theax,
+            storage=hist.storage.Weight(),
+        )
+        self.H.fill(
+            self.vals,
+            weight=self.wts * self.samplewt,
+        )
+
+        return simon_histplot(self.H, density, label, 
+                              ax=ax_main, color=self.color)
+
+class PlottableDatasetStack:
+    def __init__(datasets):
+        self.dataset = datasets
+
 class KinPlotManager:
     def __init__(self):
         self.dfs_MC = []
         self.labels_MC = []
-        self.dfs_data = None
+        self.xsecs_MC = []
+        self.numevts_MC = []
 
-    def add_MC(self, df, label):
+        self.dfs_data = None
+        self.lumis = None
+
+        self.folder = None
+        self.show=True
+
+    def add_MC_stack(self, dfs, labels, 
+                     xsecs, numevts):
+        self.dfs_MC.append(dfs)
+        self.labels_MC.append(labels)
+        self.xsecs_MC.append(xsecs)
+        self.numevts_MC.append(numevts)
+
+    def add_MC(self, df, label, 
+               xsec, numevts):
         self.dfs_MC.append(df)
         self.labels_MC.append(label)
+        self.xsecs_MC.append(xsec)
+        self.numevts_MC.append(numevts)
 
-    def add_data(self, df):
+    def add_data(self, df, lumi):
         if self.dfs_data is None:
             self.dfs_data = [df]
+            self.lumis = [lumi]
         else:
             self.dfs_data.append(df)
+            self.lumis.append(lumi)
+
+    def setup_savefig(self, folder):
+        self.folder = folder
+        os.makedirs(folder, exist_ok=True)
+
+    def toggle_show(self, show):
+        self.show = show
 
     def plot_variable(self, toplot, cut=NoCut(),
                       weighting='evtwt_nominal', 
-                      pulls=False, density=True):
+                      pulls=False, density=False):
 
         if type(toplot) is str:
             toplot = variable_from_string(toplot)
@@ -160,117 +272,52 @@ class KinPlotManager:
         else:
             raise ValueError("toplot must be a string or a Variable or Ratio object")
 
-        plot_variable(self.dfs_data, self.dfs_MC, self.labels_MC,
+        if self.folder is not None:
+            thename = 'VAR-%s_WT-%s_CUT-%s_DENSITY-%d_PULL-%d.png' % (
+                toplot.key, weighting.key, cut.key,
+                density, pulls
+            )
+            savefig = os.path.join(self.folder, thename)
+        else:
+            savefig = None
+
+        plot_variable(self.dfs_data, self.lumis,
+                      self.dfs_MC, self.labels_MC, 
+                      self.xsecs_MC, self.numevts_MC,
                       toplot, logx, logy, xlabel,
                       weighting=weighting,
                       cut=cut,
-                      pulls=pulls, density=density)
+                      pulls=pulls, density=density,
+                      savefig=savefig, show=self.show)
 
-def plot_variable(dfs_data, dfs_MC, labels_MC, 
+def plot_variable(dataset_data,
+                  datasets_MC,
                   toplot, logx, logy, xlabel,
                   weighting=Variable('evtwt_nominal'),
                   cut = NoCut(),
-                  pulls=False, density=True):
+                  pulls=False, density=True,
+                  savefig=None, show=True):
 
-    if type(toplot) is str:
-        toplot = Variable(toplot)
-
-    if dfs_data is None:
+    if datasets_data is None:
         DO_DATA = False
     else:
         DO_DATA = True
-        if type(dfs_data) not in [list,tuple]:
-            dfs_data = [dfs_data]
 
-    if type(dfs_MC) not in [list,tuple]:
-        dfs_MC = [dfs_MC]
-        labels_MC = [labels_MC]
+    if type(datasets_MC) not in [list,tuple]:
+        datasets_MC = [datasets_MC]
 
-
-    needed_columns = list(set(toplot.columns + 
-                              cut.columns +
-                              weighting.columns))
-
-    tables_MC = []
-    for df in dfs_MC:
-        tables_MC.append(
-            df.to_table(columns=needed_columns)
-        )
+    for dMC in datasets_MC:
+        dMC.evaluate_table(toplot, cut, weighting)
 
     if DO_DATA:
-        tables_data = []
-        for df in dfs_data:
-            tables_data.append(
-                df.to_table(columns=needed_columns)
-            )
+        datasets_data.evaluate_table(toplot, cut, weighting)
 
-    vals_MC = []
-    wts_MC = []
-    for table in tables_MC:
-        mask = cut.evaluate(table)
-        vals_MC.append(toplot.evaluate(table)[mask])
-        wts_MC.append(weighting.evaluate(table)[mask])
-
-    minvals_MC = [np.min(val) for val in vals_MC]
-    maxvals_MC = [np.max(val) for val in vals_MC]
-
-    minval = np.min(minvals_MC)
-    maxval = np.max(maxvals_MC)
+    global_min = np.min([dMC.minval for dMC in datasets_MC])
+    global_max = np.max([dMC.maxval for dMC in datasets_MC])
 
     if DO_DATA:
-        vals_data = []
-        wts_data = []
-        for table in tables_data:
-            mask = cut.evaluate(table)
-            vals_data.append(toplot.evaluate(table)[mask])
-            wts_data.append(weighting.evaluate(table)[mask])
-
-        minvals_data = [np.min(val) for val in vals_data]
-        maxvals_data = [np.max(val) for val in vals_data]
-
-        minval = np.min([minval, *minvals_data])
-        maxval = np.max([maxval, *maxvals_data])
-
-    if type(toplot) != Variable:
-        theax = hist.axis.Regular(
-            100, minval, maxval, 
-            transform=hist.axis.transform.log if logx else None
-        )
-
-    else:
-        dtype = tables_MC[0][toplot.columns[0]].type
-        if dtype in [pa.float16(), pa.float32(), pa.float64()]:
-            theax = hist.axis.Regular(
-                100, minval, maxval, 
-                transform=hist.axis.transform.log if logx else None
-            )
-        elif dtype in [pa.bool_(), pa.uint8(), pa.uint16(), pa.uint32(), pa.uint64(), pa.int8(), pa.int16(), pa.int32(), pa.int64()]:
-            theax = hist.axis.Integer(minval, maxval+1)
-            if logx:
-                raise ValueError("logx is not supported for integer axes")
-        else:
-            raise ValueError("Unsupported column type: %s" % dtype)
-
-    H = hist.Hist(
-        theax,
-        hist.axis.StrCategory([], name='label', growth=True),
-        storage=hist.storage.Weight(),
-    )
-
-    for val, wt, label in zip(vals_MC, wts_MC, labels_MC):
-        H.fill(
-            val,
-            weight=wt,
-            label=label,
-        )
-
-    if DO_DATA:
-        for val, wt in zip(vals_data, wts_data):
-            H.fill(
-                val,
-                weight=wt,
-                label='DATA'
-            )
+        global_min = np.min([global_min, datasets_data.minval])
+        global_max = np.max([global_max, datasets_data.maxval])
 
     fig = plt.figure(figsize=config['Figure_Size'])
     try:
@@ -281,24 +328,18 @@ def plot_variable(dfs_data, dfs_MC, labels_MC,
 
         if DO_DATA:
             hep.cms.label(ax=ax_main, data=True, label=config['Approval_Text'],
-                          year=config['Year'], lumi=config['Lumi'])
+                          year=config['Year'], lumi=datasets_data.lumi)
         else:
             hep.cms.label(ax=ax_main, data=False, label=config['Approval_Text'])
 
         mainlines = {}
-        for label in labels_MC:
-            mainlines[label] = simon_histplot(
-                                    H[{'label' : label}], 
-                                    density=density, 
-                                    label=label, ax=ax_main
-                                ) 
+        for dMC in datasets_MC:
+            mainlines[label] = dMC.plot(global_min, global_max, 50,
+                                        logx, density, ax=ax_main)
 
         if DO_DATA:
-            mainlines['DATA'] = simon_histplot(
-                                    H[{'label' : 'DATA'}], 
-                                    density=density, 
-                                    label='DATA', c='k', ax=ax_main
-                                ) 
+            mainlines['DATA'] = datasets_data.plot(global_min, global_max, 50,
+                                                   logx, density, ax=ax_main)
 
         if logx:
             ax_main.set_xscale('log')
@@ -334,7 +375,8 @@ def plot_variable(dfs_data, dfs_MC, labels_MC,
                     H[{'label' : nom}],
                     H[{'label' : label}],
                     density=density, ax=ax_ratio,
-                    label=label
+                    label=label, 
+                    color=mainlines[label][0].get_color(),
                 )
             if pulls:
                 ax_ratio.set_ylabel("%s/MC [pulls]"%nom)
@@ -344,6 +386,8 @@ def plot_variable(dfs_data, dfs_MC, labels_MC,
         ax_ratio.set_xlabel(xlabel)
 
         ax_ratio.axhline(1, color='black', linestyle='--')
+
+        ax_ratio.set_ylim(0.0, 2.0)
 
         #the automatic axis ranges bug out for some reason
         #so we set them manually
@@ -363,6 +407,10 @@ def plot_variable(dfs_data, dfs_MC, labels_MC,
         plt.tight_layout()
         plt.subplots_adjust(wspace=0, hspace=0)
 
-        plt.show()
+        if savefig is not None:
+            plt.savefig(savefig, dpi=300, bbox_inches='tight', format='png')
+
+        if show:
+            plt.show()
     finally:
         plt.close(fig)
