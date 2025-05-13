@@ -1,322 +1,308 @@
 {
-    "Lumi" : 59.83,
     "Year" : 2018,
     "Approval_Text" : "Work in progress",
     "Ratiopad_Height" : 0.5,
     "Figure_Size" : [12, 12],
     "KinAxes" : {
+        "evtwt_nominal" : { 
+            "label" : "Event weight",
+            "logx" : true,
+            "nbins" : 500,
+            "logy" : true
+        },
         "genHT" : {
             "label" : "Gen-level $H_T$ [GeV]",
             "logx" : false,
+            "nbins" : 100,
             "logy" : true
         },
         "pt" : {
             "label" : "$p_T$ [GeV]",
             "logx" : true,
+            "nbins" : 50,
             "logy" : true
         },
         "eta" : {
             "label" : "$\\eta$",
             "logx" : false,
+            "nbins" : 50,
             "logy" : false
         },
         "phi" : {
             "label" : "$\\phi$",
             "logx" : false,
+            "nbins" : 50,
             "logy" : false
         },
         "nConstituents" : {
             "label" : "Number of jet constituents",
             "logx" : false,
+            "nbins" : 50,
             "logy" : true
         },
         "nPassingParts" : {
             "label" : "Number of passing jet constituents",
             "logx" : false,
+            "nbins" : 50,
             "logy" : true
         },
         "passLooseB" : {
             "label" : "B-tagged [loose working point]",
+            "nbins" : 50,
             "logx" : false,
             "logy" : false
         },
         "passMediumB" : {
             "label" : "B-tagged [medium working point]",
+            "nbins" : 50,
             "logx" : false,
             "logy" : false
         },
         "passTightB" : {
             "label" : "B-tagged [tight working point]",
+            "nbins" : 50,
             "logx" : false,
             "logy" : false
         },
         "nTrueInt" : {
             "label" : "MC-tTruth number interactions",
+            "nbins" : 50,
             "logx" : false,
             "logy" : false
         },
         "rho" : {
             "label" : "Transverse energy density [GeV]",
+            "nbins" : 50,
             "logx" : false,
             "logy" : true
         },
         "MET" : {
             "label" : "Missing $p_T$ [GeV]",
+            "nbins" : 50,
             "logx" : true,
             "logy" : true
         },
         "numLooseB" : {
             "label" : "Number of loose B-tagged jets",
+            "nbins" : 50,
             "logx" : false,
             "logy" : false
         },
         "numMediumB" : {
             "label" : "Number of medium B-tagged jets",
+            "nbins" : 50,
             "logx" : false,
             "logy" : false
         },
         "numTightB" : {
             "label" : "Number of tight B-tagged jets",
+            "nbins" : 50,
             "logx" : false,
             "logy" : false
         },
         "numJets" : {
             "label" : "Number of passing jets",
+            "nbins" : 50,
             "logx" : false,
             "logy" : true
         },
         "Zpt" : {
             "label" : "Dimuon $p_T$ [GeV]",
+            "nbins" : 50,
             "logx" : true,
             "logy" : true
         },
         "Zy" : {
             "label" : "Dimuon $y$",
+            "nbins" : 50,
             "logx" : false,
             "logy" : false
         },
         "Zmass" : {
             "label" : "Dimuon mass [GeV]",
+            "nbins" : 50,
             "logx" : false,
             "logy" : true
         },
         "leadMuPt" : {
             "label" : "Leading muon $p_T$ [GeV]",
+            "nbins" : 50,
             "logx" : true,
             "logy" : true
         },
         "leadMuEta" : {
             "label" : "Leading muon $\\eta$",
+            "nbins" : 50,
             "logx" : false,
             "logy" : false
         },
         "leadMuCharge" : {
             "label" : "Leading muon charge",
+            "nbins" : 50,
             "logx" : false,
             "logy" : false
         },
         "subMuPt" : {
             "label" : "Subleading muon $p_T$ [GeV]",
+            "nbins" : 50,
             "logx" : true,
             "logy" : true
         },
         "subMuEta" : {
             "label" : "Subleading muon $\\eta$",
+            "nbins" : 50,
             "logx" : false,
             "logy" : false
         },
         "subMuCharge" : {
             "label" : "Subleading muon charge",
+            "nbins" : 50,
             "logx" : false,
             "logy" : false
         },
         "pdgid" : {
             "label" : "Particle ID",
+            "nbins" : 50,
             "logx" : false,
             "logy" : false
         },
         "charge" : {
             "label" : "Charge",
+            "nbins" : 50,
             "logx" : false,
             "logy" : false
         },
         "dxy" : {
             "label" : "Transverse impact parameter [cm]",
+            "nbins" : 50,
             "logx" : false,
             "logy" : true
         },
         "dz" : {
             "label" : "Longitudinal impact parameter [cm]",
+            "nbins" : 50,
             "logx" : false,
             "logy" : true
         },
         "puppiWeight" : {
             "label" : "Puppi weight",
+            "nbins" : 50,
             "logx" : false,
             "logy" : true
         },
         "fromPV" : {
             "label" : "From PV flag",
+            "nbins" : 50,
             "logx" : false,
             "logy" : false
         },
         "jetPt" : {
             "label" : "Jet $p_T$ [GeV]",
+            "nbins" : 50,
             "logx" : true,
             "logy" : true
         },
         "jetEta" : {
             "label" : "Jet $\\eta$",
+            "nbins" : 50,
             "logx" : false,
             "logy" : false
         },
         "jetPhi" : {
             "label" : "Jet $\\phi$",
+            "nbins" : 50,
             "logx" : false,
             "logy" : false
         },
         "pt_over_jetPt" : {
+            "nbins" : 50,
             "label" : "$p_T$ / Jet $p_T$",
             "logx" : true,
             "logy" : true
         },
         "wt" : {
             "label" : "EEC weight",
+            "nbins" : 50,
             "logx" : true,
             "logy" : true
         },
         "R" : {
             "label" : "EEC R coordinate [bin]",
+            "nbins" : 50,
             "logx" : false,
             "logy" : false
         },
         "r" : {
             "label" : "EEC r coordinate [bin]",
+            "nbins" : 50,
             "logx" : false,
             "logy" : false
         },
         "c" : {
             "label" : "EEC c coordinate [bin]",
+            "nbins" : 50,
             "logx" : false,
             "logy" : false
         },
         "R_reco" : {
             "label" : "Reco-level EEC R coordinate [bin]",
+            "nbins" : 50,
             "logx" : false,
             "logy" : false
         },
         "r_reco" : {
             "label" : "Reco-level EEC r coordinate [bin]",
+            "nbins" : 50,
             "logx" : false,
             "logy" : false
         },
         "c_reco" : {
             "label" : "Reco-level EEC c coordinate [bin]",
+            "nbins" : 50,
             "logx" : false,
             "logy" : false
         },
         "wt_reco" : {
             "label" : "Reco-level EEC weight",
+            "nbins" : 50,
             "logx" : true,
             "logy" : true
         },
         "R_gen" : {
             "label" : "Gen-level EEC R coordinate [bin]",
+            "nbins" : 50,
             "logx" : false,
             "logy" : false
         },
         "r_gen" : {
             "label" : "Gen-level EEC r coordinate [bin]",
+            "nbins" : 50,
             "logx" : false,
             "logy" : false
         },
         "c_gen" : {
             "label" : "Gen-level EEC c coordinate [bin]",
+            "nbins" : 50,
             "logx" : false,
             "logy" : false
         },
         "wt_gen" : {
             "label" : "Gen-level EEC weight",
+            "nbins" : 50,
             "logx" : true,
             "logy" : true
         },
         "wt_reco_over_wt_gen" : {
             "label" : "Reco-level EEC weight / Gen-level EEC weight",
+            "nbins" : 50,
             "logx" : true,
             "logy" : false
         },
         "nCHS" : {
             "label" : "Number of matched AK4CHS jets",
+            "nbins" : 50,
             "logx" : false,
             "logy" : true
-        }
-    },
-    "DatasetsMC" : {
-        "Pythia_inclusive" : {
-            "tag" : "Pythia_inclusive",
-            "label" : "HT-inclusive Pythia",
-            "color ": "blue",
-            "xsec" : 1.0
-        },
-        "Herwig_inclusive" : {
-            "tag" : "Herwig_inclusive",
-            "label" : "HT-inclusive Herwig",
-            "color ": "red",
-            "xsec" : 1.0
-        },
-        "Pythia_HT-0to70" : {
-            "tag" : "Pythia_HT-0to70",
-            "label" : "Pythia; 0 < HT [GeV] < 70",
-            "color ": "green",
-            "xsec" : 1.0
-        },
-        "Pythia_HT-70to100" : {
-            "tag" : "Pythia_HT-70to100",
-            "label" : "Pythia; 70 < HT [GeV] < 100",
-            "color ": "orange",
-            "xsec" : 1.0
-        },
-        "Pythia_HT-100to200" : {
-            "tag" : "Pythia_HT-100to200",
-            "label" : "Pythia; 100 < HT [GeV] < 200",
-            "color ": "purple",
-            "xsec" : 1.0
-        },
-        "Pythia_HT-200to400" : {
-            "tag" : "Pythia_HT-200to400",
-            "label" : "Pythia; 200 < HT [GeV] < 400",
-            "color ": "cyan",
-            "xsec" : 1.0
-        },
-        "Pythia_HT-400to600" : {
-            "tag" : "Pythia_HT-400to600",
-            "label" : "Pythia; 400 < HT [GeV] < 600",
-            "color ": "magenta",
-            "xsec" : 1.0
-        },
-        "Pythia_HT-600to800" : {
-            "tag" : "Pythia_HT-600to800",
-            "label" : "Pythia; 600 < HT [GeV] < 800",
-            "color ": "brown",
-            "xsec" : 1.0
-        },
-        "Pythia_HT-800to1200" : {
-            "tag" : "Pythia_HT-800to1200",
-            "label" : "Pythia; 800 < HT [GeV] < 1200",
-            "color ": "pink",
-            "xsec" : 1.0
-        },
-        "Pythia_HT-1200to2500" : {
-            "tag" : "Pythia_HT-1200to2500",
-            "label" : "Pythia; 1200 < HT [GeV] < 2500",
-            "color ": "gray",
-            "xsec" : 1.0
-        },
-        "Pythia_HT-2500toInf" : {
-            "tag" : "Pythia_HT-2500toInf",
-            "label" : "Pythia; 2500 < HT [GeV]",
-            "color ": "black",
-            "xsec" : 1.0
         }
     }
 }

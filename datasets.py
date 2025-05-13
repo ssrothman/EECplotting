@@ -2,7 +2,7 @@ import pyarrow.dataset as ds
 import pickle
 import os.path
 
-basedir = '/ceph/submit/data/user/s/srothman/EEC/'
+basedir = '/ceph/submit/data/group/cms/store/user/srothman/EEC/'
 unf_basedir = '/home/submit/srothman/work/EEC/EECunfold/data'
 
 def get_dataset(runtag, tag, skimmer, objsyst, whichobj):
@@ -101,3 +101,16 @@ def get_pickled_histogram(runtag, tag, skimmer, objsyst, wtsyst, whichobj):
 
     with open(thepath, 'rb') as f:
         return pickle.load(f)
+
+def get_pickled_histogram_sum(tags, xsecs, runtag, skimmer, objsyst, wtsyst, whichobj):
+    H = None
+    for tag, xsec in zip(tags, xsecs):
+        Hnext = get_pickled_histogram(runtag, tag, skimmer, objsyst, wtsyst, whichobj)
+        numevt = get_counts(runtag, tag)
+        samplewt = xsec/numevt * 1000
+
+        if H is None:
+            H = (Hnext * samplewt)
+        else:
+            H += (Hnext * samplewt)
+    return H

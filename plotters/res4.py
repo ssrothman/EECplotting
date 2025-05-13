@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import hist
 from matplotlib.colors import LogNorm, Normalize
 import numpy as np
 import awkward as ak
@@ -8,34 +9,26 @@ import contextlib
 import mplhep as hep
 from scipy.special import erf
 
-RLedges = np.linspace(0, 1.0, 11)
-RLedges = np.asarray([0, RLedges[3], RLedges[4], RLedges[5], RLedges[6], 1])
-
-redges_teedipole = np.linspace(0, 1.0, 21)
-redges_teedipole = np.asarray([0, *redges_teedipole[1::2], 1])
-ctedges_teedipole = np.linspace(0, np.pi/2, 21)
-
-redges_triangle = np.linspace(0, 1.0, 21)
-ctedges_triangle = np.linspace(0, 2*np.pi, 31)
-
-area_teedipole = 0.5 * (redges_teedipole[1:]**2 - redges_teedipole[:-1]**2)[:, None] \
-                     * (ctedges_teedipole[1:] - ctedges_teedipole[:-1])[None, :]
-
 plt.style.use(hep.style.CMS)
 
 import json
-with open('config.json', 'r') as f:
+with open('config/config.json', 'r') as f:
     config = json.load(f)
 
 def compute_flux(H, RLbin, ptbin, iToy,
                  jacobian=True,
                  normalize=True):
+    print(RLbin, ptbin, iToy)
     H2d = H[{'R' : RLbin, 'pt' : ptbin, 'bootstrap' : iToy}]
 
     vals = H2d.values(flow=True)
 
     if jacobian:
-        vals = vals/area_teedipole
+        redges = H2d.axes['r'].edges
+        cedges = H2d.axes['c'].edges
+        area = 0.5 * (redges[1:]**2 - redges[:-1]**2)[:, None] \
+                * (cedges[1:] - cedges[:-1])[None, :]
+        vals = vals/area
 
     if normalize:
         vals = vals/np.sum(vals)
@@ -138,16 +131,16 @@ def errs_from_toys(fluxfunc, pulls=False, **kwargs):
     nominal = fluxfunc(**kwargs, iToy=0)
     
     if 'H' in kwargs:
-        ntoys = kwargs['H'].axes['bootstrap'].extent - 1
+        ntoys = kwargs['H'].axes['bootstrap'].size - 1
     elif 'H1' in kwargs:
-        ntoys = kwargs['H1'].axes['bootstrap'].extent - 1
+        ntoys = kwargs['H1'].axes['bootstrap'].size - 1
     else:
         raise ValueError("No H or H1 provided to determine number of toys")
 
     sumdiff = np.zeros_like(nominal)
     sumdiff2 = np.zeros_like(nominal)
 
-    for iToy in range(1, ntoys+1):
+    for iToy in range(1, ntoys-1):
         nextflux = fluxfunc(**kwargs, iToy=iToy)
 
         sumdiff += (nextflux - nominal)
@@ -245,38 +238,45 @@ def plot_flux_2d(H, RLbin, ptbin,
                  jacobian=True,
                  normalize=True,
                  logz = True,
-                 cmap='inferno'):
+                 cmap='inferno',
+                 isCMS=True,
+                 label=None):
     flux = compute_flux(H, RLbin, ptbin, 0,
                         jacobian=jacobian,
                         normalize=normalize)
 
     ptedges = H.axes['pt'].edges
+    Redges = H.axes['R'].edges
+    redges = H.axes['r'].edges
+    cedges = H.axes['c'].edges
 
     fig = plt.figure(figsize=config['Figure_Size'])
     try:
         ax = fig.add_subplot(111, projection='polar')
-        hep.cms.label(ax=ax, data=False, label=config['Approval_Text'], pad=0.05)
+        if isCMS:
+            hep.cms.label(ax=ax, data=False, label=config['Approval_Text'], pad=0.05)
+
         if logz:
             norm = LogNorm(vmin=flux[flux>0].min(), vmax=flux.max())
         else:
             norm = Normalize(vmin=flux.min(), vmax=flux.max())
 
-        pc1 = ax.pcolormesh(ctedges_teedipole, redges_teedipole,
+        pc1 = ax.pcolormesh(cedges, redges,
                             flux,
                             cmap=cmap,
                             shading='auto',
                             norm=norm)
-        pc2 = ax.pcolormesh(np.pi-ctedges_teedipole, redges_teedipole,
+        pc2 = ax.pcolormesh(np.pi-cedges, redges,
                             flux,
                             cmap=cmap,
                             shading='auto',
                             norm=norm)
-        pc3 = ax.pcolormesh(np.pi+ctedges_teedipole, redges_teedipole,
+        pc3 = ax.pcolormesh(np.pi+cedges, redges,
                             flux,
                             cmap=cmap,
                             shading='auto',
                             norm=norm)
-        pc4 = ax.pcolormesh(2*np.pi-ctedges_teedipole, redges_teedipole,
+        pc4 = ax.pcolormesh(2*np.pi-cedges, redges,
                             flux,
                             cmap=cmap,
                             shading='auto',
@@ -284,7 +284,9 @@ def plot_flux_2d(H, RLbin, ptbin,
 
         plt.colorbar(pc1, ax=ax)
 
-        thetext = "%0.1f < RL < %0.1f\n%0.0f < pT < %0.0f" % (RLedges[RLbin-1], RLedges[RLbin], ptedges[ptbin], ptedges[ptbin+1])
+        thetext = "$%0.1f < R_L < %0.1f$\n$%0.0f < p_T < %0.0f$" % (Redges[RLbin-1], Redges[RLbin], ptedges[ptbin], ptedges[ptbin+1])
+        if label is not None:
+            thetext = label + '\n\n' + thetext
         ax.text(0.1, 0.8, thetext, 
                 horizontalalignment='center',
                 verticalalignment='bottom',
@@ -295,7 +297,6 @@ def plot_flux_2d(H, RLbin, ptbin,
                           facecolor='white')
         )
 
-        plt.savefig("test.png", bbox_inches='tight')
         plt.tight_layout()
         plt.show()
     finally:
@@ -305,16 +306,27 @@ def plot_angular_avg(H, RLbin, ptbin,
                      jacobian=True,
                      normalize=True,
                      logx=False,
-                     logy=True):
+                     logy=True, 
+                     isCMS=True,
+                     label=None):
+
+    ptedges = H.axes['pt'].edges
+    Redges = H.axes['R'].edges
+    redges = H.axes['r'].edges
+    cedges = H.axes['c'].edges
+
     fig = plt.figure(figsize=config['Figure_Size'])
     try:
         val, err = angular_avg_vals_errs(H, RLbin, ptbin, 
                                          jacobian=jacobian,
                                          normalize=normalize)
-        rmid = (redges_teedipole[1:] + redges_teedipole[:-1])/2
-        rwidths = redges_teedipole[1:] - redges_teedipole[:-1]
+
+        rmid = (redges[1:] + redges[:-1])/2
+        rwidths = redges[1:] - redges[:-1]
 
         ax = fig.add_subplot(111)
+        if isCMS:
+            hep.cms.label(ax=ax, data=False, label=config['Approval_Text'], pad=0.05)
         ax.errorbar(rmid, val,
                     xerr = rwidths/2,
                     yerr=err,
@@ -326,6 +338,19 @@ def plot_angular_avg(H, RLbin, ptbin,
         ax.set_xlabel('r')
         ax.set_ylabel('Angular average')
 
+        thetext = "$%0.1f < R_L < %0.1f$\n$%0.0f < p_T < %0.0f$" % (Redges[RLbin-1], Redges[RLbin], ptedges[ptbin], ptedges[ptbin+1])
+        if label is not None:
+            thetext = label + '\n\n' + thetext
+        ax.text(0.80, 0.75, thetext, 
+                horizontalalignment='center',
+                verticalalignment='bottom',
+                transform=ax.transAxes,
+                fontsize=24,
+                bbox=dict(boxstyle="round,pad=0.3", 
+                          edgecolor='black', 
+                          facecolor='white')
+        )
+
         plt.tight_layout()
         plt.show()
     finally:
@@ -334,44 +359,55 @@ def plot_angular_avg(H, RLbin, ptbin,
 def plot_angular_fluctuation_2d(H, RLbin, ptbin,
                                 jacobian=True,
                                 normalize=True,
-                                cmap='coolwarm'):
+                                cmap='coolwarm',
+                                isCMS=True,
+                                label=None):
+
+    ptedges = H.axes['pt'].edges
+    Redges = H.axes['R'].edges
+    redges = H.axes['r'].edges
+    cedges = H.axes['c'].edges
+
     flux = compute_angular_fluctuation(H, RLbin, ptbin, 0,
                                         jacobian=jacobian,
                                         normalize=normalize)
-    ptedges = H.axes['pt'].edges
+
     fig = plt.figure(figsize=config['Figure_Size'])
     try:
         ax = fig.add_subplot(111, projection='polar')
-        hep.cms.label(ax=ax, data=False, label=config['Approval_Text'], pad=0.05)
+        if isCMS:
+            hep.cms.label(ax=ax, data=False, label=config['Approval_Text'], pad=0.05)
 
         d1 = flux-1
         maxvar = np.max(np.abs(d1))
 
         norm = Normalize(vmin=1-maxvar, vmax=1+maxvar)
 
-        pc1 = ax.pcolormesh(ctedges_teedipole, redges_teedipole,
+        pc1 = ax.pcolormesh(cedges, redges,
                             flux,
                             cmap=cmap,
                             shading='auto',
                             norm=norm)
-        pc2 = ax.pcolormesh(np.pi-ctedges_teedipole, redges_teedipole,
+        pc2 = ax.pcolormesh(np.pi-cedges, redges,
                             flux,
                             cmap=cmap,
                             shading='auto',
                             norm=norm)
-        pc3 = ax.pcolormesh(np.pi+ctedges_teedipole, redges_teedipole,
+        pc3 = ax.pcolormesh(np.pi+cedges, redges,
                             flux,
                             cmap=cmap,
                             shading='auto',
                             norm=norm)
-        pc4 = ax.pcolormesh(2*np.pi-ctedges_teedipole, redges_teedipole,
+        pc4 = ax.pcolormesh(2*np.pi-cedges, redges,
                             flux,
                             cmap=cmap,
                             shading='auto',
                             norm=norm)
         plt.colorbar(pc1, ax=ax)
 
-        thetext = "%0.1f < RL < %0.1f\n%0.0f < pT < %0.0f" % (RLedges[RLbin-1], RLedges[RLbin], ptedges[ptbin], ptedges[ptbin+1])
+        thetext = "$%0.1f < R_L < %0.1f$\n$%0.0f < p_T < %0.0f$" % (RLedges[RLbin-1], RLedges[RLbin], ptedges[ptbin], ptedges[ptbin+1])
+        if label is not None:
+            thetext = label + '\n\n' + thetext
         ax.text(0.1, 0.8, thetext, 
                 horizontalalignment='center',
                 verticalalignment='bottom',
@@ -390,32 +426,46 @@ def plot_angular_fluctuation_2d(H, RLbin, ptbin,
 def plot_angular_fluctuation_1d(H, RLbin, ptbin,
                                 jacobian=True,
                                 normalize=True,
-                                rstep=5):
+                                rstep=5,
+                                rstop=15,
+                                rebin=1,
+                                isCMS=True,
+                                label=None):
+
+    theH = H[{'r' : slice(None, None, hist.rebin(rebin))}]
+
+    ptedges = theH.axes['pt'].edges
+    Redges = theH.axes['R'].edges
+    redges = theH.axes['r'].edges
+    cedges = theH.axes['c'].edges
+
     fig = plt.figure(figsize=config['Figure_Size'])
     try:
-        val, err = angular_fluctuation_vals_errs(H, RLbin, ptbin, 
+        val, err = angular_fluctuation_vals_errs(theH, RLbin, ptbin, 
                                                  jacobian=jacobian,
                                                  normalize=normalize)
-        tmid = (ctedges_teedipole[1:] + ctedges_teedipole[:-1])/2
-        twidths = ctedges_teedipole[1:] - ctedges_teedipole[:-1]
+        cmid = (cedges[1:] + cedges[:-1])/2
+        cwidths = cedges[1:] - cedges[:-1]
 
         ax = fig.add_subplot(111)
-        hep.cms.label(ax=ax, data=False, label=config['Approval_Text'], pad=0.05)
-        for i in range(0, val.shape[0], rstep):
-            q = ax.errorbar(tmid, val[i],
-                        xerr = twidths/2,
+        if isCMS:
+            hep.cms.label(ax=ax, data=False, label=config['Approval_Text'], pad=0.05)
+        for i in range(0, min(val.shape[0], rstop), rstep):
+            q = ax.errorbar(cmid, val[i],
+                        xerr = cwidths/2,
                         yerr=err[i],
-                        fmt='o', label=f'%0.2f < r < %0.2f' % (redges_teedipole[i], redges_teedipole[i+1]))
-            ax.errorbar(np.pi-tmid, val[i],
-                        xerr = twidths/2,
-                        yerr=err[i],
-                        fmt='o', color=q[0].get_color())
-            ax.errorbar(np.pi+tmid, val[i],
-                        xerr = twidths/2,
+                        fmt='o',
+                        label=f'%0.2f < r < %0.2f' % (redges[i], redges[i+1]))
+            ax.errorbar(np.pi-cmid, val[i],
+                        xerr = cwidths/2,
                         yerr=err[i],
                         fmt='o', color=q[0].get_color())
-            ax.errorbar(2*np.pi-tmid, val[i],
-                        xerr = twidths/2,
+            ax.errorbar(np.pi+cmid, val[i],
+                        xerr = cwidths/2,
+                        yerr=err[i],
+                        fmt='o', color=q[0].get_color())
+            ax.errorbar(2*np.pi-cmid, val[i],
+                        xerr = cwidths/2,
                         yerr=err[i],
                         fmt='o', color=q[0].get_color())
             
@@ -426,7 +476,20 @@ def plot_angular_fluctuation_1d(H, RLbin, ptbin,
 
         ax.set_xlabel('$\\phi$')
         ax.set_ylabel('Angular fluctuation')
-        ax.legend(loc='upper right', frameon=True)
+        ax.legend(loc='lower right', frameon=True)
+
+        thetext = "$%0.1f < R_L < %0.1f$\n$%0.0f < p_T < %0.0f$" % (RLedges[RLbin-1], RLedges[RLbin], ptedges[ptbin], ptedges[ptbin+1])
+        if label is not None:
+            thetext = label + '\n\n' + thetext
+        ax.text(0.8, 0.75, thetext, 
+                horizontalalignment='center',
+                verticalalignment='bottom',
+                transform=ax.transAxes,
+                fontsize=24,
+                bbox=dict(boxstyle="round,pad=0.3", 
+                          edgecolor='black', 
+                          facecolor='white')
+        )
 
         plt.tight_layout()
         plt.show()
@@ -700,7 +763,7 @@ def compare(H1, H2, RLbin, ptbin,
             elif mode =='ratio':
                 cb.set_label('Ratio')
 
-            thetext = "%0.1f < RL < %0.1f\n%0.0f < pT < %0.0f" % (RLedges[RLbin-1], RLedges[RLbin], ptedges[ptbin], ptedges[ptbin+1])
+            thetext = "$%0.1f < RL < %0.1f$\n$%0.0f < pT < %0.0f$" % (RLedges[RLbin-1], RLedges[RLbin], ptedges[ptbin], ptedges[ptbin+1])
             ax.text(0.1, 0.8, thetext, 
                     horizontalalignment='center',
                     verticalalignment='bottom',
@@ -989,14 +1052,35 @@ def plot_transfer_2d(Htransfer, wrt, cuts={}):
         cuts_transfer[key+"_reco"] = cuts[key]
         cuts_transfer[key+"_gen"] = cuts[key]
 
-    transfer = Htransfer[cuts_transfer].project(wrt+'_reco', wrt+'_gen')
+    transfer = Htransfer[cuts_transfer]
 
-    transfer = transfer.values(flow=True)
+    if wrt is not None:
+        transfer = transfer.project(wrt+'_reco', wrt+'_gen')
+        transfer = transfer.values(flow=True)
+    else:
+        genaxes = []
+        recoaxes = []
+        genshape = 1
+        recoshape = 1
+        for axis in transfer.axes:
+            if axis.name.endswith('_gen'):
+                genaxes.append(axis.name)
+                genshape *= axis.extent
+            elif axis.name.endswith('_reco'):
+                recoaxes.append(axis.name)
+                recoshape *= axis.extent
+        transfer = transfer.project(*recoaxes, *genaxes)
+        transfer = transfer.values(flow=True).reshape((recoshape, genshape))
+
     denom = transfer.sum(axis=0)
     transfer = transfer/denom[None, :]
 
-    plt.xlabel(wrt+'_gen')
-    plt.ylabel(wrt+'_reco')
+    if wrt is not None:
+        plt.xlabel(wrt+'_gen')
+        plt.ylabel(wrt+'_reco')
+    else:
+        plt.xlabel('reco')
+        plt.ylabel('gen')
 
     plt.pcolormesh(transfer, cmap="Reds", norm=LogNorm())
     plt.colorbar()
@@ -1099,9 +1183,14 @@ def fit_c(Htransfer, pt, R, r, gen):
 def plot_transfer_1d(Htransfer, wrt, thebin, gen, cuts={},
                      show=True):
     cuts_transfer = {}
+    thetext = ''
     for key in cuts.keys():
         cuts_transfer[key+"_reco"] = cuts[key]
         cuts_transfer[key+"_gen"] = cuts[key]
+        theax = Htransfer.axes[key+'_reco']
+        edges = theax.bin(cuts[key])
+        thetext += '$%0.1f < $%s $< %0.1f$\n' % (edges[0], key, edges[1])
+        print(thetext)
 
     transfer = Htransfer[cuts_transfer].project(wrt+'_reco', wrt+'_gen')
 
@@ -1124,12 +1213,75 @@ def plot_transfer_1d(Htransfer, wrt, thebin, gen, cuts={},
 
         plt.xlabel(wrt+'_reco')
 
+    if thetext != '':
+        plt.text(0.1, 0.1, thetext[:-1], 
+                horizontalalignment='center',
+                verticalalignment='bottom',
+                transform=plt.gca().transAxes,
+                fontsize=24,
+                bbox=dict(boxstyle="round,pad=0.3", 
+                          edgecolor='black', 
+                          facecolor='white')
+        )
+    
     plt.stairs(toplot_y, toplot_x)
     plt.ylabel('Transfer')
     plt.axvline(thebin, color='red', linestyle='--')
 
+
     if show:
         plt.show()
+
+def c_smearing_model(centralbins, themodel):
+    nbins = 15
+    modelsize = themodel.shape[0]//2
+    
+    result = np.zeros(nbins)
+
+    for i in range(-modelsize, modelsize+1):
+        target = centralbins + i
+        target = np.where(target<0, -1-target, target)
+        target = np.where(target>=nbins, 2*nbins-1-target, target)
+
+        result[target] += themodel[i+modelsize]
+
+    return result
+
+def c_smearing_loss(themodel, c2d):
+    loss = 0
+    for iGen in range(c2d.shape[1]):
+        thehist = c2d[:,iGen]
+        pred = c_smearing_model(iGen, themodel)
+        loss += np.sum(np.square(thehist - pred))
+    return loss
+
+def fit_c_smearing(Htransfer, cuts):
+    cuts_transfer = {}
+    for key in cuts.keys():
+        cuts_transfer[key+"_reco"] = cuts[key]
+        cuts_transfer[key+"_gen"] = cuts[key]
+
+    transfer = Htransfer[cuts_transfer].project('c_reco', 'c_gen')
+    transfer = transfer.values(flow=True)
+
+    denom = transfer.sum(axis=0)
+    transfer = transfer/denom[None, :]
+
+    import scipy.optimize as opt
+    p0 = np.zeros(15)
+    res = opt.minimize(
+        c_smearing_loss, p0,
+        args = transfer,
+        method='L-BFGS-B'
+    )
+    
+    for i in [0, 2, 4, 6, 8, 10, 12, 14]:
+        plot_transfer_1d(Htransfer, 'c', i, True, cuts, show=False)
+        themodel = c_smearing_model(i, res.x)
+        plt.errorbar(np.arange(15), themodel, xerr=0.5, fmt='o', label='fit')
+
+    plt.show()
+    return res
 
 def plot_purity_stability(Htransfer, wrt, cuts):
     cuts_transfer = {}
@@ -1137,9 +1289,24 @@ def plot_purity_stability(Htransfer, wrt, cuts):
         cuts_transfer[key+"_reco"] = cuts[key]
         cuts_transfer[key+"_gen"] = cuts[key]
 
-    transfer = Htransfer[cuts_transfer].project(wrt+'_reco', wrt+'_gen')
-
-    transfer = transfer.values(flow=True)
+    transfer = Htransfer[cuts_transfer]
+    if wrt is not None:
+        transfer = transfer.project(wrt+'_reco', wrt+'_gen')
+        transfer = transfer.values(flow=True)
+    else:
+        genaxes = []
+        recoaxes = []
+        genshape = 1
+        recoshape = 1
+        for axis in transfer.axes:
+            if axis.name.endswith('_gen'):
+                genaxes.append(axis.name)
+                genshape *= axis.extent
+            elif axis.name.endswith('_reco'):
+                recoaxes.append(axis.name)
+                recoshape *= axis.extent
+        transfer = transfer.project(*recoaxes, *genaxes)
+        transfer = transfer.values(flow=True).reshape((recoshape, genshape))
 
     denom1 = transfer.sum(axis=0)
     purity = np.diag(transfer/denom1[None, :])
@@ -1151,7 +1318,9 @@ def plot_purity_stability(Htransfer, wrt, cuts):
 
     plt.errorbar(x, purity, yerr=0, xerr = 0.5, label='Purity', fmt='o')
     plt.errorbar(x, stability, yerr=0, xerr = 0.5, label='Stability', fmt='o')
-    plt.xlabel(wrt)
+    if wrt is not None:
+        plt.xlabel(wrt)
+
     plt.ylabel('Purity/Stability')
     plt.axhline(1, color='red', linestyle='--')
     plt.ylim(0, 1.1)

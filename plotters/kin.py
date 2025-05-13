@@ -7,13 +7,126 @@ from matplotlib.colors import Normalize, LogNorm
 import hist
 import pyarrow as pa
 import json
+from datasets import get_dataset, get_counts
 
 from histplot import simon_histplot, simon_histplot_ratio
 
 plt.style.use(hep.style.CMS)
 
-with open("config.json", 'rb') as f:
+with open("config/config.json", 'r') as f:
     config = json.load(f)
+
+with open("config/datasets.json", 'r') as f:
+    datasets = json.load(f)
+
+#setup datasets
+def setup_datasets_GENONLY(skimmer, which):
+    GENONLYdsets = {}
+
+    for key in datasets['DatasetsGENONLY'].keys():
+        print("Building GENONLY dset %s"%key)
+        entry = datasets['DatasetsGENONLY'][key]
+
+        GENONLYdsets[entry['tag']] = PlottableDataset()
+        GENONLYdsets[entry['tag']].setup_MC(
+            df = get_dataset('May_04_2025', entry['tag'], skimmer, 'nominal', which),
+            label = entry['label'],
+            xsec = 1.0,
+            numevts = 1.0,
+            color = entry['color']
+        )
+    return GENONLYdsets
+
+def setup_datasets_MC(skimmer, which):
+    MCdsets = {}
+
+    for key in datasets['DatasetsMC'].keys():
+        print("Building MC dset %s"%key)
+        entry = datasets['DatasetsMC'][key]
+
+        MCdsets[entry['tag']] = PlottableDataset()
+        MCdsets[entry['tag']].setup_MC(
+            df = get_dataset('Apr_23_2025', entry['tag'], skimmer, 'nominal', which),
+            label = entry['label'],
+            xsec = entry['xsec'],
+            numevts = get_counts('Apr_23_2025', entry['tag']),
+            color = entry['color']
+        )
+
+    stackDoneMC = np.asarray([False] * len(datasets['StacksMC'].keys()))
+    while(np.any(~stackDoneMC)):
+        for i, key in enumerate(datasets['StacksMC'].keys()):
+            if stackDoneMC[i]:
+                continue
+
+            entry = datasets['StacksMC'][key]
+
+            canDo = True
+            for stackTag in entry['stacks']:
+                if stackTag not in MCdsets.keys():
+                    print("Can't build MC stack %s because %s is not available"%(key, stackTag))
+                    canDo = False
+                    break
+
+            if not canDo:
+                continue
+            
+            print("Building MC stack %s"%key)
+            MCdsets[entry['tag']] = PlottableDatasetStack()
+            MCdsets[entry['tag']].setup_MC(
+                datasets = [MCdsets[tag] for tag in entry['dsets'] + entry['stacks']],
+                global_label = entry['global_label'],
+                global_color = entry['global_color'],
+                plot_resolved = False
+            )
+            stackDoneMC[i] = True
+
+    return MCdsets
+
+def setup_datasets_DATA(skimmer, which):
+    DATAdsets = {}
+
+    for key in datasets['DatasetsDATA'].keys():
+        print("Building DATA dset %s"%key)
+        entry = datasets['DatasetsDATA'][key]
+
+        DATAdsets[entry['tag']] = PlottableDataset()
+        DATAdsets[entry['tag']].setup_data(
+            df = get_dataset('Apr_23_2025', entry['tag'], skimmer, 'nominal', which),
+            label = entry['label'],
+            lumi = entry['lumi'],
+            color = entry['color'],
+        )
+
+    stackDoneData = np.asarray([False] * len(datasets['StacksDATA'].keys()))
+    while(np.any(~stackDoneData)):
+        for i, key in enumerate(datasets['StacksDATA'].keys()):
+            if stackDoneData[i]:
+                continue
+
+            entry = datasets['StacksDATA'][key]
+
+            canDo = True
+            for stackTag in entry['stacks']:
+                if stackTag not in DATAdsets.keys():
+                    print("Can't build DATA stack %s because %s is not available"%(key, stackTag))
+                    canDo = False
+                    break
+
+            if not canDo:
+                continue
+
+            print("Building DATA stack %s"%key)
+            DATAdsets[entry['tag']] = PlottableDatasetStack()
+            DATAdsets[entry['tag']].setup_data(
+                datasets = [DATAdsets[tag] for tag in entry['dsets'] + entry['stacks']],
+                global_label = entry['global_label'],
+                global_color = entry['global_color'],
+                plot_resolved = False
+            )
+            stackDoneData[i] = True
+
+    return DATAdsets
 
 def variable_from_string(name):
     if 'over' in name:
@@ -152,12 +265,24 @@ class LessThanCut:
         return "%sLT%g"%(self.variable.name, self.value)
 
 class PlottableDataset:
-    def __init__(df, label, xsec, numevts, color):
+    def _init__():
+        pass
+
+    def setup_MC(self, df, label, xsec, numevts, color):
         self.df = df
         self.label = label
         self.xsec = xsec
         self.numevts = numevts
         self.color = color
+        self.isMC = True
+
+    def setup_data(self, df, label, lumi, color):
+        self.df = df
+        self.label = label
+        self.lumi = lumi
+        self.color = color
+        self.isdata = True
+        self.samplewt = 1
 
     def evaluate_table(self, toplot, cut, weighting):
         needed_columns = list(set(toplot.columns +
@@ -170,17 +295,14 @@ class PlottableDataset:
         self.vals = toplot.evaluate(self.table)[self.mask]
         self.wts = weighting.evaluate(self.table)[self.mask]
 
-        self.minval = ak.min(self.vals)
-        self.maxval = ak.max(self.vals)
+        self.minval = np.min(self.vals)
+        self.maxval = np.max(self.vals)
 
     def set_samplewt_MC(self, total_lumi):
-        self.samplewt = total_lumi * self.xsec / 1000
+        self.samplewt = total_lumi * self.xsec * 1000
         self.samplewt /= self.numevts
 
-    def set_samplewt_data(self):
-        self.samplewt = 1.0
-
-    def plot(self, global_min, global_max, nbins, logx, density, ax):
+    def fill_hist(self, global_min, global_max, nbins, logx):
         if self.vals.dtype in [np.bool_, np.int16, np.int32, np.int64,
                                np.uint16, np.uint32, np.uint64]:
 
@@ -201,47 +323,168 @@ class PlottableDataset:
             weight=self.wts * self.samplewt,
         )
 
-        return simon_histplot(self.H, density, label, 
-                              ax=ax_main, color=self.color)
+    def plot(self, density, ax):
+        return simon_histplot(self.H, density=density, 
+                              label=self.label, 
+                              ax=ax, color=self.color)[0]
+
+    def plot_ratio(self, other, density, pulls, ax):
+        return simon_histplot_ratio(self.H, other.H,
+                                    density = density, 
+                                    ax = ax, 
+                                    label = other.label,
+                                    color = other.color,
+                                    pulls = pulls)
+
+    def estimate_yield(self):
+        return np.sum(self.df.to_table(columns = ["evtwt_nominal"])) * self.samplewt
 
 class PlottableDatasetStack:
-    def __init__(datasets):
-        self.dataset = datasets
+    def __init__(self):
+        pass
+
+    def sort_by_yield(self):
+        for dset in self.datasets:
+            dset.set_samplewt_MC(1)
+
+        self.datasets = sorted(self.datasets, key=lambda dset : dset.estimate_yield())
+        for dset in self.datasets:
+            dset.samplewt = None
+
+    def setup_MC(self, datasets, global_label, global_color, plot_resolved):
+        self.datasets = datasets
+
+        self.label = global_label
+        self.color = global_color
+        self.plot_resolved = plot_resolved
+        self.xsec = np.max([dset.xsec for dset in self.datasets])
+
+        if plot_resolved:
+            self.sort_by_yield()
+
+    #def setup_MC(self, dfs, labels, xsecs, numevts, colors,
+    #             global_label, global_color, plot_resolved):
+    #    self.datasets = []
+    #    for df, label, xsec, numevt, color in zip(dfs, labels, xsecs, numevts, colors):
+    #        if type(df) in [list, tuple]:
+    #            newdf = PlottableDatasetStack()
+    #            newdf.setup_MC(df, label, xsec, numevt, color,
+    #                           label[-1], color[-1], False)
+    #        else:
+    #            newdf = PlottableDataset()
+    #            newdf.setup_MC(df, label, xsec, numevt, color)
+    #        self.datasets.append(newdf)
+
+    #    self.label = global_label
+    #    self.color = global_color
+    #    self.plot_resolved = plot_resolved
+
+    #    self.xsec = np.sum([dset.xsec for dset in self.datasets])
+
+    #    if plot_resolved:
+    #        self.sort_by_yeild()
+
+    def setup_data(self, datasets, global_label, global_color, plot_resolved):
+        self.datasets = datasets
+
+        self.label = global_label
+        self.color = global_color
+        self.plot_resolved = plot_resolved
+
+        self.lumi = np.sum([dset.lumi for dset in self.datasets])
+
+    #def setup_data(self, dfs, labels, lumis, colors,
+    #               global_label, global_color, plot_resolved):
+    #    self.datasets = []
+    #    self.lumi = 0
+    #    for df, label, lumi, color in zip(dfs, labels, lumis, colors):
+    #        self.lumi += lumi
+    #        newdf = PlottableDataset()
+    #        newdf.setup_data(df, label, lumi, color)
+    #        self.datasets.append(newdf)
+
+    #    self.label = global_label 
+    #    self.color = global_color
+    #    self.plot_resolved = plot_resolved
+
+    def evaluate_table(self, toplot, cut, weighting):
+        minvals = []
+        maxvals = []
+        for dset in self.datasets:
+            dset.evaluate_table(toplot, cut, weighting)
+            minvals.append(dset.minval)
+            maxvals.append(dset.maxval)
+
+        self.minval = np.min(minvals)
+        self.maxval = np.max(maxvals)
+
+    def set_samplewt_MC(self, total_lumi):
+        for dset in self.datasets:
+            dset.set_samplewt_MC(total_lumi)
+
+    def fill_hist(self, global_min, global_max, nbins, logx):
+        for dset in self.datasets:
+            dset.fill_hist(global_min, global_max, nbins, logx)
+    
+        self.H = self.datasets[0].H.copy()
+        for dset in self.datasets[1:]:
+            self.H += dset.H
+
+    def plot(self, density, ax): 
+        if self.plot_resolved:
+            artists = []
+            fillbetween = 0
+            for dset in self.datasets:
+                artist, nextfill = simon_histplot(
+                    dset.H, density=False,
+                    label = dset.label,
+                    ax = ax, color=dset.color,
+                    fillbetween = fillbetween
+                )
+                fillbetween = nextfill
+                artists.append(artist)
+            return artists
+        else:
+            return simon_histplot(self.H, density=density,
+                                  label = self.label,
+                                  ax = ax, color=self.color)[0]
+
+    def plot_ratio(self, other, density, pulls, ax):
+        print("SELF H SUM")
+        print(self.H.sum())
+        print()
+        return simon_histplot_ratio(self.H, other.H,
+                                    density=density,
+                                    ax =ax,
+                                    label = other.label,
+                                    color = other.color,
+                                    pulls = pulls)
+
+    def estimate_yield(self):
+        return np.sum([dset.estimate_yield() for dset in self.datasets])
 
 class KinPlotManager:
     def __init__(self):
         self.dfs_MC = []
-        self.labels_MC = []
-        self.xsecs_MC = []
-        self.numevts_MC = []
 
-        self.dfs_data = None
-        self.lumis = None
+        self.df_data = None
 
         self.folder = None
         self.show=True
+        self.isCMS = True
 
-    def add_MC_stack(self, dfs, labels, 
-                     xsecs, numevts):
-        self.dfs_MC.append(dfs)
-        self.labels_MC.append(labels)
-        self.xsecs_MC.append(xsecs)
-        self.numevts_MC.append(numevts)
+    def set_CMS(self, value):
+        self.isCMS = value
 
-    def add_MC(self, df, label, 
-               xsec, numevts):
-        self.dfs_MC.append(df)
-        self.labels_MC.append(label)
-        self.xsecs_MC.append(xsec)
-        self.numevts_MC.append(numevts)
+    def clear(self):
+        self.dfs_MC = []
+        self.df_data = None
 
-    def add_data(self, df, lumi):
-        if self.dfs_data is None:
-            self.dfs_data = [df]
-            self.lumis = [lumi]
-        else:
-            self.dfs_data.append(df)
-            self.lumis.append(lumi)
+    def add_MC(self, dset):
+        self.dfs_MC.append(dset)
+
+    def add_data(self, dset):
+        self.df_data = dset
 
     def setup_savefig(self, folder):
         self.folder = folder
@@ -252,7 +495,22 @@ class KinPlotManager:
 
     def plot_variable(self, toplot, cut=NoCut(),
                       weighting='evtwt_nominal', 
-                      pulls=False, density=False):
+                      pulls=False, density=False,
+                      noResolved=False):
+    
+        numMCstacks = 0
+        for dset in self.dfs_MC:
+            if type(dset) == PlottableDatasetStack:
+                numMCstacks += 1
+
+        if (numMCstacks == 1) and (not noResolved):
+            for dset in self.dfs_MC:
+                if type(dset) == PlottableDatasetStack:
+                    dset.plot_resolved = True
+        else:
+            for dset in self.dfs_MC:
+                if type(dset) == PlottableDatasetStack:
+                    dset.plot_resolved = False
 
         if type(toplot) is str:
             toplot = variable_from_string(toplot)
@@ -261,16 +519,16 @@ class KinPlotManager:
             weighting = variable_from_string(weighting)
 
         if type(toplot) is Variable:
-            logx = config['KinAxes'][toplot.name]['logx']
-            logy = config['KinAxes'][toplot.name]['logy']
-            xlabel = config['KinAxes'][toplot.name]['label']
+            thename = toplot.name
         elif type(toplot) is Ratio:
             thename = "%s_over_%s"%(toplot.num, toplot.denom)
-            logx = config['KinAxes'][thename]['logx']
-            logy = config['KinAxes'][thename]['logy']
-            xlabel = config['KinAxes'][thename]['label']
         else:
             raise ValueError("toplot must be a string or a Variable or Ratio object")
+
+        logx = config['KinAxes'][toplot.name]['logx']
+        logy = config['KinAxes'][toplot.name]['logy']
+        nbins = config['KinAxes'][toplot.name]['nbins']
+        xlabel = config['KinAxes'][toplot.name]['label']
 
         if self.folder is not None:
             thename = 'VAR-%s_WT-%s_CUT-%s_DENSITY-%d_PULL-%d.png' % (
@@ -281,24 +539,25 @@ class KinPlotManager:
         else:
             savefig = None
 
-        plot_variable(self.dfs_data, self.lumis,
-                      self.dfs_MC, self.labels_MC, 
-                      self.xsecs_MC, self.numevts_MC,
-                      toplot, logx, logy, xlabel,
+        plot_variable(self.df_data, self.dfs_MC,
+                      toplot, logx, logy, nbins, xlabel,
                       weighting=weighting,
                       cut=cut,
                       pulls=pulls, density=density,
-                      savefig=savefig, show=self.show)
+                      savefig=savefig, show=self.show,
+                      isCMS = self.isCMS)
 
 def plot_variable(dataset_data,
                   datasets_MC,
-                  toplot, logx, logy, xlabel,
+                  toplot, logx, logy, nbins, xlabel,
                   weighting=Variable('evtwt_nominal'),
                   cut = NoCut(),
                   pulls=False, density=True,
-                  savefig=None, show=True):
+                  savefig=None, show=True,
+                  isCMS=True):
+    print("Top of plot_variable()")
 
-    if datasets_data is None:
+    if dataset_data is None:
         DO_DATA = False
     else:
         DO_DATA = True
@@ -310,14 +569,29 @@ def plot_variable(dataset_data,
         dMC.evaluate_table(toplot, cut, weighting)
 
     if DO_DATA:
-        datasets_data.evaluate_table(toplot, cut, weighting)
+        dataset_data.evaluate_table(toplot, cut, weighting)
 
     global_min = np.min([dMC.minval for dMC in datasets_MC])
     global_max = np.max([dMC.maxval for dMC in datasets_MC])
 
     if DO_DATA:
-        global_min = np.min([global_min, datasets_data.minval])
-        global_max = np.max([global_max, datasets_data.maxval])
+        global_min = np.min([global_min, dataset_data.minval])
+        global_max = np.max([global_max, dataset_data.maxval])
+
+    print("evaluated tables")
+
+    for dMC in datasets_MC:
+        if DO_DATA:
+            dMC.set_samplewt_MC(dataset_data.lumi)
+        else:
+            dMC.set_samplewt_MC(1.0)
+
+        dMC.fill_hist(global_min, global_max, nbins, logx)
+
+    if DO_DATA:
+        dataset_data.fill_hist(global_min, global_max, nbins, logx)
+
+    print("Filled hists")
 
     fig = plt.figure(figsize=config['Figure_Size'])
     try:
@@ -326,20 +600,19 @@ def plot_variable(dataset_data,
                 height_ratios=(1, config['Ratiopad_Height'])
         )
 
-        if DO_DATA:
-            hep.cms.label(ax=ax_main, data=True, label=config['Approval_Text'],
-                          year=config['Year'], lumi=datasets_data.lumi)
-        else:
-            hep.cms.label(ax=ax_main, data=False, label=config['Approval_Text'])
+        if isCMS:
+            if DO_DATA:
+                hep.cms.label(ax=ax_main, data=True, label=config['Approval_Text'],
+                              year=config['Year'], lumi=dataset_data.lumi)
+            else:
+                hep.cms.label(ax=ax_main, data=False, label=config['Approval_Text'])
 
         mainlines = {}
         for dMC in datasets_MC:
-            mainlines[label] = dMC.plot(global_min, global_max, 50,
-                                        logx, density, ax=ax_main)
+            dMC.plot(density, ax=ax_main)
 
         if DO_DATA:
-            mainlines['DATA'] = datasets_data.plot(global_min, global_max, 50,
-                                                   logx, density, ax=ax_main)
+            dataset_data.plot(density, ax=ax_main)
 
         if logx:
             ax_main.set_xscale('log')
@@ -351,58 +624,47 @@ def plot_variable(dataset_data,
         else:
             ax_main.set_ylabel('Counts [a.u.]')
 
-        ax_main.legend()
+        ax_main.legend(loc='best')
 
         if DO_DATA:
-            for label in labels_MC:
-                simon_histplot_ratio(
-                    H[{'label' : 'DATA'}],
-                    H[{'label' : label}],
-                    density=density, ax=ax_ratio,
-                    label=label,
-                    color=mainlines[label][0].get_color(),
-                    pulls=pulls,
-                )
+            for dMC in datasets_MC:
+                dataset_data.plot_ratio(dMC, density, pulls, ax_ratio)
+
             if pulls:
                 ax_ratio.set_ylabel("DATA/MC [pulls]")
             else:
                 ax_ratio.set_ylabel("DATA/MC")
 
         else:
-            nom = labels_MC[0]
-            for label in labels_MC[1:]:
-                simon_histplot_ratio(
-                    H[{'label' : nom}],
-                    H[{'label' : label}],
-                    density=density, ax=ax_ratio,
-                    label=label, 
-                    color=mainlines[label][0].get_color(),
-                )
+            nom = datasets_MC[0]
+            for dMC in datasets_MC[1:]:
+                nom.plot_ratio(dMC, density, pulls, ax_ratio)
+
             if pulls:
-                ax_ratio.set_ylabel("%s/MC [pulls]"%nom)
+                ax_ratio.set_ylabel("%s/MC [pulls]"%nom.label)
             else:
-                ax_ratio.set_ylabel("%s/MC"%nom)
+                ax_ratio.set_ylabel("%s/MC"%nom.label)
 
         ax_ratio.set_xlabel(xlabel)
 
         ax_ratio.axhline(1, color='black', linestyle='--')
 
-        ax_ratio.set_ylim(0.0, 2.0)
+        #ax_ratio.set_ylim(0.0, 2.0)
 
         #the automatic axis ranges bug out for some reason
         #so we set them manually
         if not logx:
-            if maxval.dtype == np.bool_:
+            if global_max.dtype == np.bool_:
                 axrange = 1
             else:
-                axrange = maxval - minval
+                axrange = global_max - global_min
             padded_range = axrange * 1.05
-            axcenter = (minval + maxval) / 2
+            axcenter = (global_min + global_max) / 2
             newmin = axcenter - padded_range / 2
             newmax = axcenter + padded_range / 2
             ax_main.set_xlim(newmin, newmax)
         else:
-            ax_main.set_xlim(0.95*minval, 1.05*maxval)
+            ax_main.set_xlim(0.95*global_min, 1.05*global_max)
 
         plt.tight_layout()
         plt.subplots_adjust(wspace=0, hspace=0)
