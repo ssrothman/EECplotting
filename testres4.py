@@ -14,3 +14,5 @@ xsecs = [datasets['DatasetsMC'][key]['xsec'] for key in datasets['DatasetsMC'] i
 Hsum = get_pickled_histogram_sum(tags, xsecs, 'Apr_23_2025', 'EECres4tee', 'nominal', 'nominal', 'transfer')
 
 Hpythia = get_pickled_histogram("Apr_23_2025", 'Pythia_inclusive', 'EECres4tee', 'nominal', 'nominal', 'transfer')
+
+plotters.res4.plot_purity_stability(Hsum, 'R', {})
