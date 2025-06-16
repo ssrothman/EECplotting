@@ -11,6 +11,27 @@ from scipy.special import erf
 
 plt.style.use(hep.style.CMS)
 
+def get_labeltext(Redges, ptedges, Rbin, ptbin):
+    if type(Rbin) is int:
+        Rtext = '$%0.1f < R_L < %0.1f$'%(Redges[Rbin], Redges[Rbin+1])
+    elif Rbin == hist.overflow:
+        Rtext = '$%0.1f < R_L < Inf$'%(Redges[-1])
+    elif Rbin == hist.underflow:
+        Rtext = '$0 < R_L < %0.1f$'%(Redges[0])
+    else:
+        raise ValueError("Invalid R bin: %s"%Rbin)
+
+    if type(ptbin) is int:
+        Ptext = '$%0.0f < p_T < %0.0f$'%(ptedges[ptbin], ptedges[ptbin+1])
+    elif ptbin == hist.overflow:
+        Ptext = '$%0.0f < p_T < Inf$'%(ptedges[-1])
+    elif ptbin == hist.underflow:
+        Ptext = '$30 < p_T < %0.0f$'%(ptedges[0])
+    else:
+        raise ValueError("Invalid pt bin: %s"%ptbin)
+
+    return Rtext + "\n" + Ptext
+
 import json
 with open('config/config.json', 'r') as f:
     config = json.load(f)
@@ -18,7 +39,6 @@ with open('config/config.json', 'r') as f:
 def compute_flux(H, RLbin, ptbin, iToy,
                  jacobian=True,
                  normalize=True):
-    print(RLbin, ptbin, iToy)
     H2d = H[{'R' : RLbin, 'pt' : ptbin, 'bootstrap' : iToy}]
 
     vals = H2d.values(flow=True)
@@ -133,14 +153,18 @@ def errs_from_toys(fluxfunc, pulls=False, **kwargs):
     if 'H' in kwargs:
         ntoys = kwargs['H'].axes['bootstrap'].size - 1
     elif 'H1' in kwargs:
-        ntoys = kwargs['H1'].axes['bootstrap'].size - 1
+        ntoys = np.min((kwargs['H1'].axes['bootstrap'].size - 1,
+                        kwargs['H2'].axes['bootstrap'].size - 1))
     else:
         raise ValueError("No H or H1 provided to determine number of toys")
+
+    if ntoys == 0:
+        return nominal, np.zeros_like(nominal)
 
     sumdiff = np.zeros_like(nominal)
     sumdiff2 = np.zeros_like(nominal)
 
-    for iToy in range(1, ntoys-1):
+    for iToy in range(1, ntoys+1):
         nextflux = fluxfunc(**kwargs, iToy=iToy)
 
         sumdiff += (nextflux - nominal)
@@ -284,7 +308,7 @@ def plot_flux_2d(H, RLbin, ptbin,
 
         plt.colorbar(pc1, ax=ax)
 
-        thetext = "$%0.1f < R_L < %0.1f$\n$%0.0f < p_T < %0.0f$" % (Redges[RLbin-1], Redges[RLbin], ptedges[ptbin], ptedges[ptbin+1])
+        thetext = get_labeltext(RLedges, ptedges, RLbin, ptbin)
         if label is not None:
             thetext = label + '\n\n' + thetext
         ax.text(0.1, 0.8, thetext, 
@@ -338,7 +362,7 @@ def plot_angular_avg(H, RLbin, ptbin,
         ax.set_xlabel('r')
         ax.set_ylabel('Angular average')
 
-        thetext = "$%0.1f < R_L < %0.1f$\n$%0.0f < p_T < %0.0f$" % (Redges[RLbin-1], Redges[RLbin], ptedges[ptbin], ptedges[ptbin+1])
+        thetext = get_labeltext(RLedges, ptedges, RLbin, ptbin)
         if label is not None:
             thetext = label + '\n\n' + thetext
         ax.text(0.80, 0.75, thetext, 
@@ -405,7 +429,7 @@ def plot_angular_fluctuation_2d(H, RLbin, ptbin,
                             norm=norm)
         plt.colorbar(pc1, ax=ax)
 
-        thetext = "$%0.1f < R_L < %0.1f$\n$%0.0f < p_T < %0.0f$" % (RLedges[RLbin-1], RLedges[RLbin], ptedges[ptbin], ptedges[ptbin+1])
+        thetext = get_labeltext(RLedges, ptedges, RLbin, ptbin)
         if label is not None:
             thetext = label + '\n\n' + thetext
         ax.text(0.1, 0.8, thetext, 
@@ -478,7 +502,7 @@ def plot_angular_fluctuation_1d(H, RLbin, ptbin,
         ax.set_ylabel('Angular fluctuation')
         ax.legend(loc='lower right', frameon=True)
 
-        thetext = "$%0.1f < R_L < %0.1f$\n$%0.0f < p_T < %0.0f$" % (RLedges[RLbin-1], RLedges[RLbin], ptedges[ptbin], ptedges[ptbin+1])
+        thetext = get_labeltext(RLedges, ptedges, RLbin, ptbin)
         if label is not None:
             thetext = label + '\n\n' + thetext
         ax.text(0.8, 0.75, thetext, 
@@ -501,7 +525,8 @@ def compare_1d(H1, H2,
                RLbin, ptbin,
                jacobian=True, normalize=True, 
                what = 'flux', shiftx=0,
-               r=0, c=0):
+               r=0, c=0,
+               savefig=None):
 
     if what == 'flux':
         val1, err1 = flux_vals_errs(H1, RLbin, ptbin,
@@ -568,6 +593,9 @@ def compare_1d(H1, H2,
     else:
         raise ValueError("Invalid what: %s" % what)
 
+    RLedges = H1.axes['R'].edges
+    ptedges = H1.axes['pt'].edges
+
     if what != 'angular_fluctuation':
         fig = plt.figure(figsize=config['Figure_Size'])
         try:
@@ -577,8 +605,9 @@ def compare_1d(H1, H2,
             )
             hep.cms.label(ax=ax_main, data=False, label=config['Approval_Text'])
 
-            rmid = (redges_teedipole[1:] + redges_teedipole[:-1])/2
-            rwidths = redges_teedipole[1:] - redges_teedipole[:-1]
+            redges = H1.axes['r'].edges
+            rmid = (redges[1:] + redges[:-1])/2
+            rwidths = redges[1:] - redges[:-1]
 
             if what == 'angular_avg':
                 ax_main.errorbar(rmid+shiftx*rwidths/4, val1,
@@ -596,8 +625,9 @@ def compare_1d(H1, H2,
                                 yerr=ratioerr,
                                 fmt='o', label='Ratio')
             else:
-                phimin = ctedges_teedipole[c]
-                phimax = ctedges_teedipole[c+1]
+                ctedges = H1.axes['c'].edges
+                phimin = ctedges[c]
+                phimax = ctedges[c+1]
 
                 phitext = ' - $%0.2f < \\phi < %0.2f$' % (phimin, phimax)
                 ax_main.errorbar(rmid+shiftx*rwidths/4, val1[:,c],
@@ -630,12 +660,29 @@ def compare_1d(H1, H2,
             ax_ratio.set_xlabel('r')
             if what != 'relative_uncertainty':
                 ax_main.set_yscale('log')
-            ax_ratio.set_ylabel("%s / %s" % (label2, label1))
+            #ax_ratio.set_ylabel("%s / %s" % (label2, label1))
+            ax_ratio.set_ylabel("Ratio")
+
+            thetext = get_labeltext(RLedges, ptedges, RLbin, ptbin)
+            ax_main.text(0.15, 0.1, thetext, 
+                    horizontalalignment='center',
+                    verticalalignment='bottom',
+                    transform=ax_main.transAxes,
+                    fontsize=24,
+                    bbox=dict(boxstyle="round,pad=0.3", 
+                              edgecolor='black', 
+                              facecolor='white')
+            )
 
             plt.tight_layout()
             plt.subplots_adjust(hspace=0, wspace=0)
 
-            plt.show()
+            if savefig is not None:
+                plt.savefig("%s_R%d_PT%d_r%d_c%d_vsr.png"%(savefig, RLbin, ptbin, r, c), format='png',
+                            bbox_inches='tight')
+                plt.clf()
+            else:
+                plt.show()
         finally:
             plt.close(fig)
 
@@ -648,11 +695,13 @@ def compare_1d(H1, H2,
             )
             hep.cms.label(ax=ax_main, data=False, label=config['Approval_Text'])
 
-            cmid = (ctedges_teedipole[1:] + ctedges_teedipole[:-1])/2
-            cwidths = ctedges_teedipole[1:] - ctedges_teedipole[:-1]
+            ctedges = H1.axes['c'].edges
+            cmid =   (ctedges[1:] + ctedges[:-1])/2
+            cwidths = ctedges[1:] - ctedges[:-1]
 
-            rmin = redges_teedipole[r]
-            rmax = redges_teedipole[r+1]
+            redges = H1.axes['r'].edges
+            rmin = redges[r]
+            rmax = redges[r+1]
 
             rtext = ' - $%0.2f < r < %0.2f$' % (rmin, rmax)
 
@@ -677,7 +726,8 @@ def compare_1d(H1, H2,
 
             ax_ratio.axhline(1, color='black', linestyle='--')
             ax_ratio.set_xlabel('$\\phi$')
-            ax_ratio.set_ylabel("%s / %s" % (label2, label1))
+            ax_ratio.set_ylabel("Ratio")
+            #ax_ratio.set_ylabel("%s / %s" % (label2, label1))
 
             if what == 'flux':
                 ax_main.set_ylabel("Flux")
@@ -688,10 +738,26 @@ def compare_1d(H1, H2,
             elif what == 'angular_fluctuation':
                 ax_main.set_ylabel("Angular fluctuation")
 
+            thetext = get_labeltext(RLedges, ptedges, RLbin, ptbin)
+            ax_main.text(0.1, 0.15, thetext, 
+                    horizontalalignment='center',
+                    verticalalignment='bottom',
+                    transform=ax_main.transAxes,
+                    fontsize=24,
+                    bbox=dict(boxstyle="round,pad=0.3", 
+                              edgecolor='black', 
+                              facecolor='white')
+            )
+
             plt.tight_layout()
             plt.subplots_adjust(hspace=0, wspace=0)
 
-            plt.show()
+            if savefig is not None:
+                plt.savefig("%s_R%d_PT%d_r%d_c%d_vsc.png"%(savefig, RLbin, ptbin, r, c), format='png',
+                            bbox_inches='tight')
+                plt.clf()
+            else:
+                plt.show()
         finally:
             plt.close(fig)
 
@@ -763,7 +829,7 @@ def compare(H1, H2, RLbin, ptbin,
             elif mode =='ratio':
                 cb.set_label('Ratio')
 
-            thetext = "$%0.1f < RL < %0.1f$\n$%0.0f < pT < %0.0f$" % (RLedges[RLbin-1], RLedges[RLbin], ptedges[ptbin], ptedges[ptbin+1])
+            thetext = get_labeltext(RLedges, ptedges, RLbin, ptbin)
             ax.text(0.1, 0.8, thetext, 
                     horizontalalignment='center',
                     verticalalignment='bottom',
@@ -1086,111 +1152,29 @@ def plot_transfer_2d(Htransfer, wrt, cuts={}):
     plt.colorbar()
     plt.show()
 
-def guassian_angle_smearing(phi_left, phi_right, mu, sigma, mask):
-    z_left = (phi_left - mu)/sigma
-    z_right = (phi_right - mu)/sigma
-    cdf = 0.5 * (erf(z_right) - erf(z_left))
-
-    #key point is that the angle wraps around
-    #to stay in the first quadrant
-    #lets add on the contribution from the second and fourth quadrants
-    phi_left4 = -phi_left
-    phi_right4 = -phi_right
-    z_left4 = (phi_left4 - mu)/sigma
-    z_right4 = (phi_right4 - mu)/sigma
-    cdf += 0.5 * (erf(z_right4) - erf(z_left4))
-
-    phi_left2 = np.pi - phi_left
-    phi_right2 = np.pi - phi_right
-    z_left2 = (phi_left2 - mu)/sigma    
-    z_right2 = (phi_right2 - mu)/sigma
-    cdf += 0.5 * (erf(z_right2) - erf(z_left2))
-
-    return (cdf/np.sum(cdf))[mask]
-
-def parameterized_func(Nbins, mu, mask):
-    edges = np.linspace(0, np.pi/2, Nbins+1)
-    left = edges[:-1]
-    right = edges[1:]
-    return lambda sigma: guassian_angle_smearing(left, right, mu, sigma, mask)
-
-def c_fitfunc(sigma, funcs, ys):
-    err2 = 0
-    for func, y in zip(funcs, ys):
-        err2 += np.sum(np.square(func(sigma) - y))
-    return err2
-
-def make_c_fitfunc(Nbins, y2d):
-    thefuncs =[]
-    ys = []
-    for i in range(Nbins):
-        mu = (i + 0.5) / ( (2/np.pi) * Nbins)
-        mask = y2d[:, i] > 1e-4
-        thefuncs.append(parameterized_func(Nbins, mu, mask))
-        ys.append(y2d[mask, i])
-
-    return lambda sigma: c_fitfunc(sigma, thefuncs, ys)
-
-def fit_c(Htransfer, pt, R, r, gen):
-    cuts_transfer = {
-        'pt_reco' : pt,
-        'R_reco' : R,
-        'r_reco' : r,
-        'pt_gen' : pt,
-        'R_gen' : R,
-        'r_gen' : r
-    }
-
-    transfer = Htransfer[cuts_transfer].project('c_reco', 'c_gen')
-    transfer = transfer.values(flow=True)
-
-    if gen:
-        denom = transfer.sum(axis=0)
-        transfer = transfer/denom[None, :]
-    else:
-        denom = transfer.sum(axis=1)
-        transfer = transfer/denom[:, None]
-        transfer = transfer.T
-
-    fitfunc = make_c_fitfunc(transfer.shape[1], transfer)
-    import scipy.optimize as opt
-    
-    sigma_guess = 0.1
-    sigma_bounds = (0, 1)
-
-    res = opt.minimize(
-        fitfunc,
-        sigma_guess,
-        bounds=[sigma_bounds],
-        method='L-BFGS-B'
-    )
-    print(res)
-
-    for i in range(0,transfer.shape[1],2):
-        plot_transfer_1d(Htransfer, 'c', i, gen, {'R' : R, 'r' : r, 'pt' : pt}, show=False)
-        mu = (i + 0.5) / ( (2/np.pi) * transfer.shape[1])
-        mask = transfer[:, i] > 1e-3
-        plotfunc = parameterized_func(transfer.shape[1], mu, mask)
-        x = np.arange(transfer.shape[1])[mask]
-        y = plotfunc(res.x[0]+0.03)
-        plt.errorbar(x, y, xerr=0.5, fmt='o', label='fit')
-        print(i)
-        print(x)
-        print(y)
-        print(res.x[0])
-    plt.show()
-
-def plot_transfer_1d(Htransfer, wrt, thebin, gen, cuts={},
+def plot_transfer_1d(Htransfer, wrt, thebin, gen, cuts={}, cuts_reco=None,
                      show=True):
     cuts_transfer = {}
     thetext = ''
-    for key in cuts.keys():
-        cuts_transfer[key+"_reco"] = cuts[key]
-        cuts_transfer[key+"_gen"] = cuts[key]
-        theax = Htransfer.axes[key+'_reco']
-        edges = theax.bin(cuts[key])
-        thetext += '$%0.1f < $%s $< %0.1f$\n' % (edges[0], key, edges[1])
-        print(thetext)
+
+    if cuts_reco is None:
+        for key in cuts.keys():
+            cuts_transfer[key+"_reco"] = cuts[key]
+            cuts_transfer[key+"_gen"] = cuts[key]
+            theax = Htransfer.axes[key+'_reco']
+            edges = theax.bin(cuts[key])
+            thetext += '$%g < %s < %g$\n' % (edges[0], key, edges[1])
+    else:
+        for key in cuts.keys():
+            cuts_transfer[key+"_gen"] = cuts[key]
+            theax = Htransfer.axes[key+'_gen']
+            edges = theax.bin(cuts[key])
+            thetext += '$%g < %s < %g$\n' % (edges[0], key+'_{gen}', edges[1])
+        for key in cuts_reco.keys():
+            cuts_transfer[key+"_reco"] = cuts_reco[key]
+            theax = Htransfer.axes[key+'_reco']
+            edges = theax.bin(cuts_reco[key])
+            thetext += '$%g < %s < %g$\n' % (edges[0], key+'_{reco}', edges[1])
 
     transfer = Htransfer[cuts_transfer].project(wrt+'_reco', wrt+'_gen')
 
@@ -1249,17 +1233,48 @@ def c_smearing_model(centralbins, themodel):
 
 def c_smearing_loss(themodel, c2d):
     loss = 0
+    
+    #MSE LOSS
     for iGen in range(c2d.shape[1]):
+        if c2d[:,iGen].sum() == 0:
+            continue
+
         thehist = c2d[:,iGen]
         pred = c_smearing_model(iGen, themodel)
         loss += np.sum(np.square(thehist - pred))
+
+    #MONOTONICITY LOSS
+    CM = 10
+    middle = len(themodel)//2
+    for i in range(1, middle+1):
+        if themodel[middle+i] - themodel[middle+(i-1)] > 0:
+            loss += CM * (themodel[middle+i] - themodel[middle+(i-1)])
+        if themodel[middle-i] - themodel[middle-(i-1)] > 0:
+            loss += CM * (themodel[middle-i] - themodel[middle-(i-1)])
+
+    #SYMMETRY LOSS
+    CS = 10000
+    for i in range(1, middle+1):
+        loss += CS * np.square(themodel[middle+i] - themodel[middle-i])
+
+    #NORMALIZATION LOSS
+    CN = 100
+    norm = np.sum(themodel)
+    loss += CN * np.square(norm - 1)
+
     return loss
 
-def fit_c_smearing(Htransfer, cuts):
+def fit_c_smearing(Htransfer, cuts, cuts_reco=None):
     cuts_transfer = {}
-    for key in cuts.keys():
-        cuts_transfer[key+"_reco"] = cuts[key]
-        cuts_transfer[key+"_gen"] = cuts[key]
+    if cuts_reco is None:
+        for key in cuts.keys():
+            cuts_transfer[key+"_reco"] = cuts[key]
+            cuts_transfer[key+"_gen"] = cuts[key]
+    else:
+        for key in cuts.keys():
+            cuts_transfer[key+"_gen"] = cuts[key]
+        for key in cuts_reco.keys():
+            cuts_transfer[key+"_reco"] = cuts_reco[key]
 
     transfer = Htransfer[cuts_transfer].project('c_reco', 'c_gen')
     transfer = transfer.values(flow=True)
@@ -1272,16 +1287,52 @@ def fit_c_smearing(Htransfer, cuts):
     res = opt.minimize(
         c_smearing_loss, p0,
         args = transfer,
-        method='L-BFGS-B'
+        method='L-BFGS-B',
+        bounds = [(0, 1)]*15,
     )
     
     for i in [0, 2, 4, 6, 8, 10, 12, 14]:
-        plot_transfer_1d(Htransfer, 'c', i, True, cuts, show=False)
+        plot_transfer_1d(Htransfer, 'c', i, True, cuts, cuts_reco, show=False)
         themodel = c_smearing_model(i, res.x)
         plt.errorbar(np.arange(15), themodel, xerr=0.5, fmt='o', label='fit')
 
     plt.show()
     return res
+
+def fit_all_c_smearings(Htransfer):
+    import scipy.optimize as opt
+    from tqdm import tqdm
+    result = np.zeros_like(Htransfer.values(flow=True))
+    for pt_reco in tqdm(range(Htransfer.axes['pt_reco'].extent)):
+        for R_reco in range(Htransfer.axes['R_reco'].extent):
+            for r_reco in range(Htransfer.axes['r_reco'].extent):
+                for pt_gen in range(Htransfer.axes['pt_gen'].extent):
+                    for R_gen in range(Htransfer.axes['R_gen'].extent):
+                        for r_gen in range(Htransfer.axes['r_gen'].extent):
+                            print("%d %d %d %d %d %d" % (pt_reco, R_reco, r_reco, pt_gen, R_gen, r_gen))
+                            c2d = Htransfer.values(flow=True)[pt_reco, R_reco, r_reco, :, pt_gen, R_gen, r_gen, :]
+                            if c2d.sum() == 0:
+                                continue
+
+                            denom = c2d.sum(axis=0)
+                            denom = np.where(denom == 0, 1, denom)
+                            c2d = c2d/denom[None, :]
+
+                            p0 = np.zeros(15)
+                            res = opt.minimize(
+                                c_smearing_loss, p0,
+                                args = c2d,
+                                method='L-BFGS-B',
+                                bounds = [(0, 1)]*15,
+                            )
+                            if not res.success:
+                                print("MINIMIZATION FAILED")
+                                print(res)
+                            else:
+                                for iGen in range(c2d.shape[1]):
+                                    pred = c_smearing_model(iGen, res.x)
+                                    result[pt_reco, R_reco, r_reco, :, pt_gen, R_gen, r_gen, iGen] = pred
+    return result
 
 def plot_purity_stability(Htransfer, wrt, cuts):
     cuts_transfer = {}
