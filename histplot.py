@@ -17,8 +17,42 @@ def _call_stairs(ax, edges, plotvals, fillbetween, **kwargs):
         **kwargs
     )
 
+def simon_histplot_rate(H, ax=None, **kwargs):
+    if len(H.axes) != 2:
+        raise ValueError("histplot_rate only supports 2D histograms")
+
+    if ax is None:
+        ax = plt.gca()
+
+    vals = H.values().copy()
+    errs = np.sqrt(H.variances()).copy()
+
+    passvals = vals[1, :]
+    passerrs = errs[1, :]
+
+    failvals = vals[0, :]
+    failerrs = errs[0, :]
+
+    total = passvals + failvals
+
+    rate = passvals / total
+    rateerr = np.sqrt(
+        np.square((1-rate)*passerrs/total) +
+        np.square(rate*failerrs/total)
+    )
+
+    edges = H.axes[1].edges
+    centers = H.axes[1].centers
+    widths = H.axes[1].widths
+
+    if type(H.axes[1]) is hist.axis.Integer:
+        centers -= 0.5
+        edges -= 0.5
+
+    return _call_errorbar(ax, centers, rate, widths/2, rateerr, **kwargs)
+
 def simon_histplot(H, ax=None, density=False, fillbetween = None, **kwargs):
-    if len(H.axes) > 1:
+    if len(H.axes) != 1:
         raise ValueError("histplot only supports 1D histograms")
 
     if ax is None:
@@ -33,6 +67,7 @@ def simon_histplot(H, ax=None, density=False, fillbetween = None, **kwargs):
 
     if type(H.axes[0]) is hist.axis.Integer:
         centers -= 0.5
+        edges -= 0.5
 
     if density:
         N = np.sum(vals)
@@ -53,7 +88,7 @@ def simon_histplot(H, ax=None, density=False, fillbetween = None, **kwargs):
 def simon_histplot_ratio(Hnum, Hdenom, ax=None, 
                          density=False, pulls=False, **kwargs):
     
-    if len(Hnum.axes) > 1 or len(Hdenom.axes) > 1:
+    if len(Hnum.axes) != 1 or len(Hdenom.axes) != 1:
         raise ValueError("histplot only supports 1D histograms")
 
     if Hnum.axes[0] != Hdenom.axes[0]:
@@ -75,9 +110,6 @@ def simon_histplot_ratio(Hnum, Hdenom, ax=None,
     if type(Hnum.axes[0]) is hist.axis.Integer:
         centers -= 0.5
 
-    print("before")
-    print(errs_num/vals_num)
-    print(errs_denom/vals_denom)
     if density:
         Nnum = np.sum(vals_num)
         Ndenom = np.sum(vals_denom)
@@ -87,9 +119,6 @@ def simon_histplot_ratio(Hnum, Hdenom, ax=None,
 
         errs_denom /= Ndenom
         vals_denom /= Ndenom
-    print("after")
-    print(errs_num/vals_num)
-    print(errs_denom/vals_denom)
 
     vals_num /= widths
     errs_num /= widths
@@ -106,8 +135,5 @@ def simon_histplot_ratio(Hnum, Hdenom, ax=None,
         ratio = ratio-1
         ratio = ratio/ratio_err
         ratio_err = np.ones_like(ratio)
-
-    print(ratio)
-    print(ratio_err)
 
     return _call_errorbar(ax, centers, ratio, widths/2, ratio_err, **kwargs)

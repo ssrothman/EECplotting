@@ -4,6 +4,33 @@
     "Ratiopad_Height" : 0.5,
     "Figure_Size" : [12, 12],
     "KinAxes" : {
+        "UFUNC<lambda>(nMatches)" : {
+            "label" : "Matched"
+        },
+        "UFUNCabsolute(eta)" : {
+            "label" : "$|\\eta|$"
+        },
+        "matched" : {
+            "label" : "Matched"
+        },
+        "pt_minus_matchPt_over_matchPt" : {
+            "label" : "$(p_T^{Reco} - p_T^{Gen}) / p_T^{Gen}$",
+            "logx" : false,
+            "nbins" : 101,
+            "logy" : false
+        },
+        "phi_minus_matchPhi" : {
+            "label" : "$\\phi^{Reco} - \\phi^{Gen}$",
+            "logx" : false,
+            "nbins" : 101,
+            "logy" : false
+        },
+        "eta_minus_matchEta" : {
+            "label" : "$\\eta^{Reco} - \\eta^{Gen}$",
+            "logx" : false,
+            "nbins" : 101,
+            "logy" : false
+        },
         "evtwt_nominal" : { 
             "label" : "Event weight",
             "logx" : true,

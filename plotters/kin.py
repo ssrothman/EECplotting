@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+from util import is_integral, make_ax
 import os
 import os.path
 import numpy as np
@@ -7,9 +8,9 @@ from matplotlib.colors import Normalize, LogNorm
 import hist
 import pyarrow as pa
 import json
-from datasets import get_dataset, get_counts
+from datasets import get_dataset, get_procpkl
 
-from histplot import simon_histplot, simon_histplot_ratio
+from histplot import simon_histplot, simon_histplot_ratio, simon_histplot_rate
 
 plt.style.use(hep.style.CMS)
 
@@ -49,7 +50,7 @@ def setup_datasets_MC(skimmer, which):
             df = get_dataset('Apr_23_2025', entry['tag'], skimmer, 'nominal', which),
             label = entry['label'],
             xsec = entry['xsec'],
-            numevts = get_counts('Apr_23_2025', entry['tag']),
+            numevts = get_procpkl('Apr_23_2025', entry['tag'], 'Count'),
             color = entry['color']
         )
 
@@ -153,37 +154,161 @@ class Variable:
     def key(self):
         return self.name
     
-class Ratio:
-    def __init__(self, num, denom):
-        self.num = num
-        self.denom = denom
+class CorrectionlibVariable:
+    def __init__(self, var_l, path, key):
+        self.var_l = []
+        for var in var_l:
+            if type(var) is str:
+                self.var_l.append(variable_from_string(var))
+            else:
+                self.var_l.append(var)
+
+        from correctionlib import CorrectionSet
+        cset = CorrectionSet.from_file(path)
+        if key not in list(cset.keys()):
+            print("Error: Correctionlib key '%s' not found in %s"%(key, path))
+            print("Available keys: %s"%list(cset.keys()))
+            raise ValueError("Correctionlib key not found")
+        self.eval = cset[key].evaluate
+        self.csetkey = key
 
     @property
     def columns(self):
-        return [self.num, self.denom]
+        cols = []
+        for var in self.var_l:
+            cols += var.columns
+        return list(set(cols))
 
     def evaluate(self, table):
-        return table[self.num].to_numpy()/table[self.denom].to_numpy()
+        args = []
+        for var in self.var_l:
+            args.append(var.evaluate(table))
+
+        return self.eval(*args)
 
     @property
     def key(self):
-        return "%s_over_%s"%(self.num, self.denom)
+        return "CORRECTIONLIB(%s)"%(self.csetkey)
+
+class UFuncVariable:
+    def __init__(self, name, ufunc):
+        self.name = name
+        self.ufunc = ufunc
+
+    @property
+    def columns(self):
+        return [self.name]
+
+    def evaluate(self, table):
+        return self.ufunc(table[self.name].to_numpy())
+
+    @property
+    def key(self):
+        return 'UFUNC%s(%s)'%(self.ufunc.__name__, self.name)
+
+class RateVariable:
+    def __init__(self, binaryfield, wrt):
+        if type(binaryfield) is str:
+            self.binaryfield = Variable(binaryfield)
+        else:
+            self.binaryfield = binaryfield
+
+        if type(wrt) is str:
+            self.wrt = Variable(wrt)
+        else:
+            self.wrt = wrt
+
+    @property
+    def columns(self):
+        return self.binaryfield.columns + self.wrt.columns
+
+    def evaluate(self, table):
+        return [self.binaryfield.evaluate(table),
+                self.wrt.evaluate(table)]
+
+    @property
+    def key(self):
+        return "%s_rate_wrt_%s"%(self.binaryfield.key, self.wrt.key)
+
+class ResolutionVariable:
+    def __init__(self, gen, reco):
+        self.gen = gen
+        self.reco = reco
+
+    @property
+    def columns(self):
+        return [self.gen, self.reco]
+
+    def evaluate(self, table):
+        return table[self.reco].to_numpy() - table[self.gen].to_numpy() 
+
+    @property
+    def key(self):
+        return "%s_minus_%s"%(self.reco, self.gen)
+
+class RelativeResolutionVariable:
+    def __init__(self, gen, reco):
+        self.gen = gen
+        self.reco = reco
+
+    @property
+    def columns(self):
+        return [self.gen, self.reco]
+
+    def evaluate(self, table):
+        gen = table[self.gen].to_numpy()
+        reco = table[self.reco].to_numpy()
+        return (reco - gen) / gen
+
+    @property
+    def key(self):
+        return "%s_minus_%s_over_%s"%(self.reco, self.gen, self.gen)
+
+class Ratio:
+    def __init__(self, num, denom):
+        if type(num) is str:
+            self.num = Variable(num)
+        else:
+            self.num = num
+
+        if type(denom) is str:
+            self.denom = Variable(denom)
+        else:
+            self.denom = denom
+
+    @property
+    def columns(self):
+        return list(set(self.num.columns + self.denom.columns))
+
+    def evaluate(self, table):
+        return self.num.evaluate(table) / self.denom.evaluate(table)
+
+    @property
+    def key(self):
+        return "%s_over_%s"%(self.num.key, self.denom.key)
 
 class Product:
     def __init__(self, var1, var2):
-        self.var1 = var1
-        self.var2 = var2
+        if type(var1) is str:
+            self.var1 = Variable(var1)
+        else:
+            self.var1 = var1
+
+        if type(var2) is str:
+            self.var2 = Variable(var2)
+        else:
+            self.var2 = var2
 
     @property
     def columns(self):
-        return [self.var1, self.var2]
+        return self.var1.columns + self.var2.columns
 
     def evaluate(self, table):
-        return table[self.var1].to_numpy() * table[self.var2].to_numpy()
+        return self.var1.evaluate(table) * self.var2.evaluate(table)
 
     @property
     def key(self):
-        return "%s_times_%s"%(self.var1, self.var2)
+        return "%s_times_%s"%(self.var1.key, self.var2.key)
 
 class NoCut:
     def __init__(self):
@@ -199,6 +324,35 @@ class NoCut:
     @property
     def key(self):
         return "none"
+
+    @property
+    def plottext(self):
+        return "Inclusive"
+
+class EqualsCut:
+    def __init__(self, variable, value):
+        self.value = value
+        if type(variable) is str:
+            self.variable = variable_from_string(variable)
+        else:
+            self.variable = variable
+
+    @property
+    def columns(self):
+        return self.variable.columns
+
+    def evaluate(self, table):
+        ev = self.variable.evaluate(table)
+        return ev == self.value
+
+    @property
+    def key(self):
+        return "%sEQ%g"%(self.variable.key, self.value)
+
+    @property
+    def plottext(self):
+        return "%s$ = %g$"%(config['KinAxes'][self.variable.key]['label'], 
+                            self.value)
 
 class TwoSidedCut:
     def __init__(self, variable, low, high):
@@ -222,8 +376,14 @@ class TwoSidedCut:
 
     @property
     def key(self):
-        return "%sLT%gGT%g"%(self.variable.name, self.high, self.low)
+        return "%sLT%gGT%g"%(self.variable.key, self.high, self.low)
 
+    @property
+    def plottext(self):
+        return "$%g \\leq $%s$ < %g$"%(
+                self.low,
+                config['KinAxes'][self.variable.key]['label'], 
+                self.high)
 class GreaterThanCut:
     def __init__(self, variable, value):
         self.value = value
@@ -242,8 +402,12 @@ class GreaterThanCut:
 
     @property
     def key(self):
-        return "%sGT%g"%(self.variable.name, self.value)
+        return "%sGT%g"%(self.variable.key, self.value)
 
+    @property
+    def plottext(self):
+        return "%s$ \\geq %g$"%(config['KinAxes'][self.variable.key]['label'], 
+                            self.value)
 class LessThanCut:
     def __init__(self, variable, value):
         self.value = value
@@ -262,7 +426,43 @@ class LessThanCut:
 
     @property
     def key(self):
-        return "%sLT%g"%(self.variable.name, self.value)
+        return "%sLT%g"%(self.variable.key, self.value)
+
+    @property
+    def plottext(self):
+        return "%s$ < %g$"%(config['KinAxes'][self.variable.key]['label'], 
+                            self.value)
+
+class AndCuts:
+    def __init__(self, *cuts):
+        self.cuts = cuts
+
+    @property
+    def columns(self):
+        cols = []
+        for cut in self.cuts:
+            cols += cut.columns
+        return list(set(cols))
+
+    def evaluate(self, table):
+        mask = self.cuts[0].evaluate(table)
+        for cut in self.cuts[1:]:
+            mask = np.logical_and(mask, cut.evaluate(table))
+        return mask
+
+    @property
+    def key(self):
+        result = self.cuts[0].key
+        for cut in self.cuts[1:]:
+            result += "_AND_" + cut.key
+        return result
+
+    @property
+    def plottext(self):
+        result = self.cuts[0].plottext
+        for cut in self.cuts[1:]:
+            result += '\n' + cut.plottext
+        return result
 
 class PlottableDataset:
     def _init__():
@@ -284,6 +484,49 @@ class PlottableDataset:
         self.isdata = True
         self.samplewt = 1
 
+    def evaluate_table_Nd(self, toplot_l, cut, weighting):
+        needed_columns = set(cut.columns + weighting.columns)
+        for toplot in toplot_l:
+            needed_columns.update(toplot.columns)
+        needed_columns = list(needed_columns)
+
+        self.table = self.df.to_table(columns=needed_columns)
+
+        self.mask = cut.evaluate(self.table)
+        self.vals = []
+        for toplot in toplot_l:
+            vals = toplot.evaluate(self.table)
+            vals = vals[self.mask]
+            self.vals.append(vals)
+        self.wts = weighting.evaluate(self.table)[self.mask]
+
+        if self.mask.sum() == 0:
+            self.minval = -np.inf
+            self.maxval = np.inf
+        else:
+            self.minval = np.asarray([np.min(vals) for vals in self.vals])
+            self.maxval = np.asarray([np.max(vals) for vals in self.vals])
+
+    def evaluate_table_rate(self, toplot, cut, weighting):
+        needed_columns = list(set(toplot.columns +
+                                  cut.columns + 
+                                  weighting.columns))
+
+        self.table = self.df.to_table(columns=needed_columns)
+
+        self.mask = cut.evaluate(self.table)
+        self.vals = toplot.evaluate(self.table)
+        self.vals[0] = self.vals[0][self.mask]
+        self.vals[1] = self.vals[1][self.mask]
+        self.wts = weighting.evaluate(self.table)[self.mask]
+
+        if self.mask.sum() == 0:
+            self.minval = -np.inf
+            self.maxval = np.inf
+        else:
+            self.minval = np.min(self.vals[1])
+            self.maxval = np.max(self.vals[1])
+
     def evaluate_table(self, toplot, cut, weighting):
         needed_columns = list(set(toplot.columns +
                                   cut.columns +
@@ -295,25 +538,56 @@ class PlottableDataset:
         self.vals = toplot.evaluate(self.table)[self.mask]
         self.wts = weighting.evaluate(self.table)[self.mask]
 
-        self.minval = np.min(self.vals)
-        self.maxval = np.max(self.vals)
+        if self.mask.sum() == 0:
+            self.minval = -np.inf
+            self.maxval = np.inf
+        else:
+            self.minval = np.min(self.vals)
+            self.maxval = np.max(self.vals)
 
     def set_samplewt_MC(self, total_lumi):
         self.samplewt = total_lumi * self.xsec * 1000
         self.samplewt /= self.numevts
 
-    def fill_hist(self, global_min, global_max, nbins, logx):
-        if self.vals.dtype in [np.bool_, np.int16, np.int32, np.int64,
-                               np.uint16, np.uint32, np.uint64]:
+    def fill_hist_Nd(self, global_min, global_max, nbins, logx):
+        theaxes = []
+        for val, gmin, gmax, nbins, lx in zip(self.vals, global_min, 
+                                                global_max, nbins, logx):
+            theaxes.append(make_ax(val.dtype, gmin, gmax, nbins, lx))
 
-            theax = hist.axis.Integer(global_min, global_max+1)
-            if logx:
-                raise ValueError("logx is not supported for integer axes")
-        else:
-            theax = hist.axis.Regular(
-                    nbins, global_min, global_max,
-                    transform=hist.axis.transform.log if logx else None
-            )
+        self.H = hist.Hist(
+            *theaxes,
+            storage=hist.storage.Weight()
+        )
+
+        self.H.fill(
+            *self.vals,
+            weight = self.wts * self.samplewt
+        )
+
+    def fill_hist_rate(self, global_min, global_max, nbins, logx):
+        theax1 = make_ax(self.vals[0].dtype, 
+                         0, 1,
+                         None, False)
+
+        theax2 = make_ax(self.vals[1].dtype, 
+                         global_min, global_max, 
+                         nbins, logx)
+
+        self.H = hist.Hist(
+            theax1,
+            theax2,
+            storage=hist.storage.Weight()
+        )
+
+        self.H.fill(
+            self.vals[0],
+            self.vals[1],
+            weight = self.wts * self.samplewt
+        )
+
+    def fill_hist(self, global_min, global_max, nbins, logx):
+        theax = make_ax(self.vals.dtype, global_min, global_max, nbins, logx)
         self.H = hist.Hist(
             theax,
             storage=hist.storage.Weight(),
@@ -335,6 +609,10 @@ class PlottableDataset:
                                     label = other.label,
                                     color = other.color,
                                     pulls = pulls)
+
+    def plot_rate(self, ax):
+        return simon_histplot_rate(self.H, label=self.label,
+                                   ax=ax, color=self.color)
 
     def estimate_yield(self):
         return np.sum(self.df.to_table(columns = ["evtwt_nominal"])) * self.samplewt
@@ -362,28 +640,6 @@ class PlottableDatasetStack:
         if plot_resolved:
             self.sort_by_yield()
 
-    #def setup_MC(self, dfs, labels, xsecs, numevts, colors,
-    #             global_label, global_color, plot_resolved):
-    #    self.datasets = []
-    #    for df, label, xsec, numevt, color in zip(dfs, labels, xsecs, numevts, colors):
-    #        if type(df) in [list, tuple]:
-    #            newdf = PlottableDatasetStack()
-    #            newdf.setup_MC(df, label, xsec, numevt, color,
-    #                           label[-1], color[-1], False)
-    #        else:
-    #            newdf = PlottableDataset()
-    #            newdf.setup_MC(df, label, xsec, numevt, color)
-    #        self.datasets.append(newdf)
-
-    #    self.label = global_label
-    #    self.color = global_color
-    #    self.plot_resolved = plot_resolved
-
-    #    self.xsec = np.sum([dset.xsec for dset in self.datasets])
-
-    #    if plot_resolved:
-    #        self.sort_by_yeild()
-
     def setup_data(self, datasets, global_label, global_color, plot_resolved):
         self.datasets = datasets
 
@@ -393,19 +649,27 @@ class PlottableDatasetStack:
 
         self.lumi = np.sum([dset.lumi for dset in self.datasets])
 
-    #def setup_data(self, dfs, labels, lumis, colors,
-    #               global_label, global_color, plot_resolved):
-    #    self.datasets = []
-    #    self.lumi = 0
-    #    for df, label, lumi, color in zip(dfs, labels, lumis, colors):
-    #        self.lumi += lumi
-    #        newdf = PlottableDataset()
-    #        newdf.setup_data(df, label, lumi, color)
-    #        self.datasets.append(newdf)
+    def evaluate_table_Nd(self, toplot_l, cut, weighting):
+        minvals = []
+        maxvals = []
+        for dset in self.datasets:
+            dset.evaluate_table_Nd(toplot_l, cut, weighting)
+            minvals.append(dset.minval)
+            maxvals.append(dset.maxval)
 
-    #    self.label = global_label 
-    #    self.color = global_color
-    #    self.plot_resolved = plot_resolved
+        self.minval = np.min(minvals, axis=0)
+        self.maxval = np.max(maxvals, axis=0)
+
+    def evaluate_table_rate(self, toplot, cut, weighting):
+        minvals = []
+        maxvals = []
+        for dset in self.datasets:
+            dset.evaluate_table_rate(toplot, cut, weighting)
+            minvals.append(dset.minval)
+            maxvals.append(dset.maxval)
+
+        self.minval = np.min(minvals)
+        self.maxval = np.max(maxvals)
 
     def evaluate_table(self, toplot, cut, weighting):
         minvals = []
@@ -421,6 +685,22 @@ class PlottableDatasetStack:
     def set_samplewt_MC(self, total_lumi):
         for dset in self.datasets:
             dset.set_samplewt_MC(total_lumi)
+
+    def fill_hist_Nd(self, global_min, global_max, nbins, logx):
+        for dset in self.datasets:
+            dset.fill_hist_Nd(global_min, global_max, nbins, logx)
+
+        self.H = self.datasets[0].H.copy()
+        for dset in self.datasets[1:]:
+            self.H += dset.H
+
+    def fill_hist_rate(self, global_min, global_max, nbins, logx):
+        for dset in self.datasets:
+            dset.fill_hist_rate(global_min, global_max, nbins, logx)
+
+        self.H = self.datasets[0].H.copy()
+        for dset in self.datasets[1:]:
+            self.H += dset.H
 
     def fill_hist(self, global_min, global_max, nbins, logx):
         for dset in self.datasets:
@@ -450,15 +730,18 @@ class PlottableDatasetStack:
                                   ax = ax, color=self.color)[0]
 
     def plot_ratio(self, other, density, pulls, ax):
-        print("SELF H SUM")
-        print(self.H.sum())
-        print()
         return simon_histplot_ratio(self.H, other.H,
                                     density=density,
                                     ax =ax,
                                     label = other.label,
                                     color = other.color,
                                     pulls = pulls)
+
+    def plot_rate(self, ax):
+        if self.plot_resolved:
+            raise ValueError("Rate variables not supported in resolved stacks")
+        return simon_histplot_rate(self.H, label=self.label,
+                                   ax = ax, color=self.color)
 
     def estimate_yield(self):
         return np.sum([dset.estimate_yield() for dset in self.datasets])
@@ -494,8 +777,12 @@ class KinPlotManager:
         self.show = show
 
     def plot_variable(self, toplot, cut=NoCut(),
-                      weighting='evtwt_nominal', 
+                      weighting_MC='evtwt_nominal', 
+                      weighting_data='evtwt_nominal',
                       pulls=False, density=False,
+                      clamp_ratiopad=None,
+                      force_xlim=None,
+                      cut_text = False,
                       noResolved=False):
     
         numMCstacks = 0
@@ -515,45 +802,72 @@ class KinPlotManager:
         if type(toplot) is str:
             toplot = variable_from_string(toplot)
 
-        if type(weighting) is str:
-            weighting = variable_from_string(weighting)
+        if type(weighting_MC) is str:
+            weighting_MC = variable_from_string(weighting_MC)
 
-        if type(toplot) is Variable:
-            thename = toplot.name
-        elif type(toplot) is Ratio:
-            thename = "%s_over_%s"%(toplot.num, toplot.denom)
+        if type(weighting_data) is str:
+            weighting_data = variable_from_string(weighting_data)
+
+        if type(toplot) is RateVariable:
+            logx = config['KinAxes'][toplot.wrt.key]['logx']
+            logy = config['KinAxes'][toplot.wrt.key]['logy']
+            nbins = config['KinAxes'][toplot.wrt.key]['nbins']
+            xlabel = config['KinAxes'][toplot.wrt.key]['label']
         else:
-            raise ValueError("toplot must be a string or a Variable or Ratio object")
-
-        logx = config['KinAxes'][toplot.name]['logx']
-        logy = config['KinAxes'][toplot.name]['logy']
-        nbins = config['KinAxes'][toplot.name]['nbins']
-        xlabel = config['KinAxes'][toplot.name]['label']
+            logx = config['KinAxes'][toplot.key]['logx']
+            logy = config['KinAxes'][toplot.key]['logy']
+            nbins = config['KinAxes'][toplot.key]['nbins']
+            xlabel = config['KinAxes'][toplot.key]['label']
 
         if self.folder is not None:
             thename = 'VAR-%s_WT-%s_CUT-%s_DENSITY-%d_PULL-%d.png' % (
-                toplot.key, weighting.key, cut.key,
+                toplot.key, weighting_MC.key, cut.key,
                 density, pulls
             )
             savefig = os.path.join(self.folder, thename)
         else:
             savefig = None
 
+        no_ratiopad = (len(self.dfs_MC) == 0 and self.df_data is None) or \
+                      (len(self.dfs_MC) == 1 and self.df_data is None)
+
+        vlines = []
+        hlines = []
+        if type(toplot) in [ResolutionVariable, RelativeResolutionVariable]:
+            vlines += [0]
+        elif type(toplot) is RateVariable:
+            hlines += [0, 1]
+            logy = False
+
         plot_variable(self.df_data, self.dfs_MC,
                       toplot, logx, logy, nbins, xlabel,
-                      weighting=weighting,
+                      weighting_MC=weighting_MC,
+                      weighting_data=weighting_data,
                       cut=cut,
                       pulls=pulls, density=density,
                       savefig=savefig, show=self.show,
+                      clamp_ratiopad = clamp_ratiopad,
+                      no_ratiopad = no_ratiopad,
+                      force_xlim = force_xlim,
+                      vlines=vlines,
+                      hlines=hlines,
+                      cut_text = cut_text,
                       isCMS = self.isCMS)
 
 def plot_variable(dataset_data,
                   datasets_MC,
                   toplot, logx, logy, nbins, xlabel,
-                  weighting=Variable('evtwt_nominal'),
+                  weighting_MC=Variable('evtwt_nominal'),
+                  weighting_data=Variable('evtwt_nominal'),
                   cut = NoCut(),
                   pulls=False, density=True,
                   savefig=None, show=True,
+                  clamp_ratiopad=None,
+                  no_ratiopad = False,
+                  force_xlim = None,
+                  vlines = [],
+                  hlines = [],
+                  cut_text = False,
                   isCMS=True):
     print("Top of plot_variable()")
 
@@ -561,15 +875,26 @@ def plot_variable(dataset_data,
         DO_DATA = False
     else:
         DO_DATA = True
+    
+    if type(toplot) is RateVariable:
+        IS_RATE = True
+    else:
+        IS_RATE = False
 
     if type(datasets_MC) not in [list,tuple]:
         datasets_MC = [datasets_MC]
 
     for dMC in datasets_MC:
-        dMC.evaluate_table(toplot, cut, weighting)
+        if IS_RATE:
+            dMC.evaluate_table_rate(toplot, cut, weighting_MC)
+        else:
+            dMC.evaluate_table(toplot, cut, weighting_MC)
 
     if DO_DATA:
-        dataset_data.evaluate_table(toplot, cut, weighting)
+        if IS_RATE:
+            dataset_data.evaluate_table_rate(toplot, cut, weighting_data)
+        else:
+            dataset_data.evaluate_table(toplot, cut, weighting_data)
 
     global_min = np.min([dMC.minval for dMC in datasets_MC])
     global_max = np.max([dMC.maxval for dMC in datasets_MC])
@@ -577,6 +902,10 @@ def plot_variable(dataset_data,
     if DO_DATA:
         global_min = np.min([global_min, dataset_data.minval])
         global_max = np.max([global_max, dataset_data.maxval])
+
+    if force_xlim is not None:
+        global_min = np.asarray(force_xlim[0])
+        global_max = np.asarray(force_xlim[1])
 
     print("evaluated tables")
 
@@ -586,33 +915,47 @@ def plot_variable(dataset_data,
         else:
             dMC.set_samplewt_MC(1.0)
 
-        dMC.fill_hist(global_min, global_max, nbins, logx)
+        if IS_RATE:
+            dMC.fill_hist_rate(global_min, global_max, nbins, logx)
+        else:
+            dMC.fill_hist(global_min, global_max, nbins, logx)
 
     if DO_DATA:
-        dataset_data.fill_hist(global_min, global_max, nbins, logx)
+        if IS_RATE:
+            dataset_data.fill_hist_rate(global_min, global_max, nbins, logx)
+        else:
+            dataset_data.fill_hist(global_min, global_max, nbins, logx)
 
     print("Filled hists")
 
     fig = plt.figure(figsize=config['Figure_Size'])
     try:
-        (ax_main, ax_ratio) = fig.subplots(
-                2, 1, sharex=True, 
-                height_ratios=(1, config['Ratiopad_Height'])
-        )
+        if no_ratiopad:
+            ax_main = fig.subplots(1, 1)
+        else:
+            (ax_main, ax_ratio) = fig.subplots(
+                    2, 1, sharex=True, 
+                    height_ratios=(1, config['Ratiopad_Height'])
+            )
 
         if isCMS:
             if DO_DATA:
                 hep.cms.label(ax=ax_main, data=True, label=config['Approval_Text'],
-                              year=config['Year'], lumi=dataset_data.lumi)
+                              year=config['Year'], lumi='%0.2f'%dataset_data.lumi)
             else:
                 hep.cms.label(ax=ax_main, data=False, label=config['Approval_Text'])
 
-        mainlines = {}
         for dMC in datasets_MC:
-            dMC.plot(density, ax=ax_main)
+            if IS_RATE:
+                dMC.plot_rate(ax=ax_main)
+            else:
+                dMC.plot(density, ax=ax_main)
 
         if DO_DATA:
-            dataset_data.plot(density, ax=ax_main)
+            if IS_RATE:
+                dataset_data.plot_rate(ax=ax_main)
+            else:
+                dataset_data.plot(density, ax=ax_main)
 
         if logx:
             ax_main.set_xscale('log')
@@ -624,32 +967,62 @@ def plot_variable(dataset_data,
         else:
             ax_main.set_ylabel('Counts [a.u.]')
 
-        ax_main.legend(loc='best')
+        for vline in vlines:
+            ax_main.axvline(vline, color='black', linestyle='--')
+        for hline in hlines:
+            ax_main.axhline(hline, color='black', linestyle='--')
 
-        if DO_DATA:
-            for dMC in datasets_MC:
-                dataset_data.plot_ratio(dMC, density, pulls, ax_ratio)
+        if cut_text:
+            ax_main.text(
+                0.05, 0.95, cut.plottext,
+                horizontalalignment='left',
+                verticalalignment='top',
+                transform=ax_main.transAxes,
+                fontsize=24, 
+                bbox={
+                    'boxstyle': 'round,pad=0.3',
+                    'facecolor': 'white',
+                    'edgecolor': 'black',
+                    'alpha': 0.8
+                }
+            )
 
-            if pulls:
-                ax_ratio.set_ylabel("DATA/MC [pulls]")
+        if not no_ratiopad:
+            ax_main.legend(loc='best')
+
+            if DO_DATA:
+                for dMC in datasets_MC:
+                    if IS_RATE:
+                        raise NotImplementedError("Rate variables not supported in ratio plots")
+                    else:
+                        dataset_data.plot_ratio(dMC, density, pulls, ax_ratio)
+
+                if pulls:
+                    ax_ratio.set_ylabel("DATA/MC [pulls]")
+                else:
+                    ax_ratio.set_ylabel("DATA/MC")
+
             else:
-                ax_ratio.set_ylabel("DATA/MC")
+                nom = datasets_MC[0]
+                for dMC in datasets_MC[1:]:
+                    if IS_RATE:
+                        raise NotImplementedError("Rate variables not supported in ratio plots")
+                    else:
+                        nom.plot_ratio(dMC, density, pulls, ax_ratio)
 
+                if pulls:
+                    ax_ratio.set_ylabel("%s/MC [pulls]"%nom.label)
+                else:
+                    ax_ratio.set_ylabel("%s/MC"%nom.label)
+
+            ax_ratio.set_xlabel(xlabel)
+
+            ax_ratio.axhline(1, color='black', linestyle='--')
+
+            if clamp_ratiopad is not None:
+                ax_ratio.set_ylim(clamp_ratiopad[0], clamp_ratiopad[1])
         else:
-            nom = datasets_MC[0]
-            for dMC in datasets_MC[1:]:
-                nom.plot_ratio(dMC, density, pulls, ax_ratio)
-
-            if pulls:
-                ax_ratio.set_ylabel("%s/MC [pulls]"%nom.label)
-            else:
-                ax_ratio.set_ylabel("%s/MC"%nom.label)
-
-        ax_ratio.set_xlabel(xlabel)
-
-        ax_ratio.axhline(1, color='black', linestyle='--')
-
-        #ax_ratio.set_ylim(0.0, 2.0)
+            ax_main.set_xlabel(xlabel)
 
         #the automatic axis ranges bug out for some reason
         #so we set them manually
