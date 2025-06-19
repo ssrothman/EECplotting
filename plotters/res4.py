@@ -1377,3 +1377,98 @@ def plot_purity_stability(Htransfer, wrt, cuts):
     plt.ylim(0, 1.1)
     plt.legend()
     plt.show()
+
+def plot_correlations(invhess, data=False, isCMS=True,
+                      savefig=None):
+    fig = plt.figure(figsize=config['Figure_Size'])
+    try:
+        err = np.sqrt(np.diag(invhess))
+        corrmat = invhess / np.outer(err, err)
+        ax = fig.add_subplot(111)
+        if isCMS:
+            hep.cms.label(ax=ax, data=data, label=config['Approval_Text'])
+
+        im = ax.imshow(corrmat, cmap='coolwarm', vmin=-1, vmax=1)
+        cbar = fig.colorbar(im, ax=ax)
+        cbar.set_label('Correlation Coefficient')
+        #ax.set_xticks(np.arange(corrmat.shape[0]))
+        #ax.set_yticks(np.arange(corrmat.shape[1]))
+        #ax.set_xticklabels(np.arange(corrmat.shape[0]))
+        #ax.set_yticklabels(np.arange(corrmat.shape[1]))
+        plt.setp(ax.get_xticklabels(), rotation=45, ha='right', rotation_mode='anchor')
+        ax.set_xlabel('Bins')
+        ax.set_ylabel('Bins')
+
+        plt.tight_layout()
+
+        if savefig is not None:
+            plt.savefig(savefig, format='png', bbox_inches='tight', dpi=300)
+            plt.clf()
+        else:
+            plt.show()
+    finally:
+        plt.close(fig)
+
+def plot_pulls(res, data=False, isCMS=True,
+               savefig=None):
+    fig = plt.figure(figsize=config['Figure_Size'])
+    try:
+        pulls = res.x[7875:]
+        pullerr = np.diag(np.sqrt(res.invhess[7875:, 7875:]))
+        ax = fig.add_subplot(111)
+
+        if isCMS:
+            hep.cms.label(ax=ax, data=data, label=config['Approval_Text'])
+
+        ax.errorbar(np.arange(len(pulls)), pulls, yerr=pullerr, fmt='o', label='Pulls', color='black', ecolor='gray')
+        ax.axhline(0, color='red', linestyle='--')
+        ax.set_xlabel('Nuisance index')
+        ax.set_ylabel('Pulls')
+
+        plt.tight_layout()
+        if savefig is not None:
+            plt.savefig(savefig, format='png', bbox_inches='tight', dpi=300)
+            plt.clf()
+        else:
+            plt.show()
+        plt.show()
+    finally:
+        plt.close(fig)
+
+def plot_named_pulls(res, data=False, isCMS=True,
+               savefig=None):
+    fig = plt.figure(figsize=config['Figure_Size'])
+    try:
+        pulls = res.x[7875:]
+        pullerr = np.diag(np.sqrt(res.invhess[7875:, 7875:]))
+
+        pullidxs = []
+        pullnames = []
+        pullvals = []
+        pullerrs = []
+        for key in res.namedNuisances.keys():
+            pullidxs.append(key)
+            pullnames.append(res.namedNuisances[key].name)
+            pullvals.append(pulls[key])
+            pullerrs.append(pullerr[key])
+
+        ax = fig.add_subplot(111)
+
+        if isCMS:
+            hep.cms.label(ax=ax, data=data, label=config['Approval_Text'])
+
+        ax.errorbar(np.arange(len(pullvals)), pullvals, yerr=pullerrs, fmt='o', label='Pulls', color='black', ecolor='gray')
+        ax.axhline(0, color='red', linestyle='--')
+        ax.set_xticks(np.arange(len(pullvals)))
+        ax.set_xticklabels(pullnames, rotation=45, ha='right', rotation_mode='anchor')
+        ax.set_ylabel('Pulls')
+
+        plt.tight_layout()
+        if savefig is not None:
+            plt.savefig(savefig, format='png', bbox_inches='tight', dpi=300)
+            plt.clf()
+        else:
+            plt.show()
+        plt.show()
+    finally:
+        plt.close(fig)
