@@ -73,13 +73,17 @@ def get_unfolded_histogram(name):
 
 def get_pickled_histogram(runtag, tag, skimmer, objsyst, wtsyst, whichobj,
                           statN=-1, statK=-1, shuffle_boots=False,
-                          boot_per_file=-1):
+                          boot_per_file=-1,
+                          reweight='kinreweight',
+                          max_nboot=-1):
     thepath = os.path.join(basedir, runtag, tag, skimmer)
 
     subpaths = os.scandir(thepath)
     options = []
     for subpath in subpaths:
         if not (subpath.is_dir()):
+            continue
+        if not (subpath.name.startswith('hists')):
             continue
         options.append(subpath.name)
 
@@ -109,6 +113,8 @@ def get_pickled_histogram(runtag, tag, skimmer, objsyst, wtsyst, whichobj,
                 continue
             if statN <=0 and 'stat' in subpath.name:
                 continue 
+            if reweight is not None and reweight not in subpath.name:
+                continue
 
             if boot_per_file >0 and 'boot' in subpath.name and 'boot%d' % boot_per_file not in subpath.name:
                 print("couldn't find boot%d in %s"%(boot_per_file, subpath.name))
@@ -140,7 +146,10 @@ def get_pickled_histogram(runtag, tag, skimmer, objsyst, wtsyst, whichobj,
         print()
 
     with open(thefile, 'rb') as f:
-        H = pickle.load(f)[0]
+        H = pickle.load(f)
+
+    if type(H) in [list, tuple]:
+        H = H[0]
 
     #find additional bootstraps
     Hboots = []
@@ -154,7 +163,12 @@ def get_pickled_histogram(runtag, tag, skimmer, objsyst, wtsyst, whichobj,
     if 'rng' in options[choice]:
         used_rngs.append(int(re.search(r'rng(\d+)', options[choice]).group(1)))
 
-    for subpath in os.scandir(thepath):
+    subpaths = list(os.scandir(thepath))
+    if shuffle_boots:
+        np.random.shuffle(subpaths)
+
+    Nboot_so_far = H.axes['bootstrap'].size - 1
+    for subpath in subpaths:
         if subpath.is_dir():
             continue
         if not subpath.name.startswith('%s_%s_%s'%(whichobj, objsyst, wtsyst)):
@@ -166,6 +180,8 @@ def get_pickled_histogram(runtag, tag, skimmer, objsyst, wtsyst, whichobj,
             if 'first' in subpath.name:
                 continue
         if 'boot' not in subpath.name:
+            continue
+        if reweight is not None and reweight not in subpath.name:
             continue
 
         if statN > 0 and "%dstat%d"%(statN, statK) not in subpath.name:
@@ -180,21 +196,23 @@ def get_pickled_histogram(runtag, tag, skimmer, objsyst, wtsyst, whichobj,
         nextrng = int(re.search(r'rng(\d+)', subpath.name).group(1))
         if nextrng in used_rngs:
             continue
-        else:
-            used_rngs.append(nextrng)
-            with open(os.path.join(thepath, subpath.name), 'rb') as f:
-                print(os.path.join(thepath, subpath.name))
-                Hnext = pickle.load(f)[0]
-                if 'skipNominal' not in subpath.name:
-                    Hnext = Hnext[{'bootstrap' : slice(1, None)}]
-                Hboots.append(Hnext)
+
+        used_rngs.append(nextrng)
+        with open(os.path.join(thepath, subpath.name), 'rb') as f:
+            print(os.path.join(thepath, subpath.name))
+            Hnext = pickle.load(f)
+            if type(Hnext) in [list, tuple]:
+                Hnext = Hnext[0]
+            if 'skipNominal' not in subpath.name:
+                Hnext = Hnext[{'bootstrap' : slice(1, None)}]
+
+        Nboot_so_far += Hnext.axes['bootstrap'].size
+        Hboots.append(Hnext)
+        if max_nboot >= 0 and Nboot_so_far >= max_nboot:
+            break
 
     expected_sumwt = H.sum(flow=True)
     if len(Hboots) > 0:
-        if shuffle_boots:
-            import numpy as np
-            np.random.shuffle(Hboots)
-
         totalboot = H.axes['bootstrap'].size
         for Hb in Hboots:
             totalboot += Hb.axes['bootstrap'].size
