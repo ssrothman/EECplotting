@@ -1431,7 +1431,6 @@ def plot_pulls(res, data=False, isCMS=True,
             plt.clf()
         else:
             plt.show()
-        plt.show()
     finally:
         plt.close(fig)
 
@@ -1448,7 +1447,7 @@ def plot_named_pulls(res, data=False, isCMS=True,
         pullerrs = []
         for key in res.namedNuisances.keys():
             pullidxs.append(key)
-            pullnames.append(res.namedNuisances[key].name)
+            pullnames.append(res.namedNuisances[key])
             pullvals.append(pulls[key])
             pullerrs.append(pullerr[key])
 
@@ -1469,6 +1468,5 @@ def plot_named_pulls(res, data=False, isCMS=True,
             plt.clf()
         else:
             plt.show()
-        plt.show()
     finally:
         plt.close(fig)
