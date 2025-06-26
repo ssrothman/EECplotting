@@ -41,6 +41,8 @@ parser.add_argument('--reweight', type=str, default=None)
 
 parser.add_argument('--outputtag', type=str, default='Pythia_HTsum')
 
+parser.add_argument('-j', '--jobs', type=int, default=1)
+
 args= parser.parse_args()
 
 import subprocess
@@ -56,17 +58,30 @@ def make_command(objsyst, wtsyst, what):
         '--firstN', str(args.firstN),
         '--boot_per_file', *shlex.split(' '.join(map(str, args.boot_per_file))),
         '--max_nboot', str(args.max_nboot),
-        '--outputtag', args.outputtag
+        '--outputtag', args.outputtag,
+        '--mute'
     ]
     if args.reweight is not None:
         command += ['--reweight', args.reweight]
     return command
 
-for thewhat in args.whats:
-    if not args.skipNominal:
-        subprocess.run(make_command('nominal', 'nominal', thewhat), check=True)
-    for objsyst in args.objsysts:
-        subprocess.run(make_command(objsyst, 'nominal', thewhat), check=True)
-    for wtsyst in args.wtsysts:
-        subprocess.run(make_command('nominal', wtsyst, thewhat), check=True)
+# setup parallel execution
+if __name__ == "__main__":
+    from multiprocessing import Pool
+
+    def run_command(command):
+        subprocess.run(command, check=True)
+
+    from tqdm import tqdm
+    with Pool(args.jobs) as pool:
+        commands = []
+        for thewhat in args.whats:
+            if not args.skipNominal:
+                commands.append(make_command('nominal', 'nominal', thewhat))
+            for objsyst in args.objsysts:
+                commands.append(make_command(objsyst, 'nominal', thewhat))
+            for wtsyst in args.wtsysts:
+                commands.append(make_command('nominal', wtsyst, thewhat))
+
+        results = list(tqdm(pool.imap(run_command, commands), total=len(commands), desc="Building HTsum histograms"))
 

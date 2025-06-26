@@ -19,7 +19,15 @@ parser.add_argument('--reweight', type=str, default=None)
 
 parser.add_argument('--outputtag', type=str, default='Pythia_HTsum')
 
+parser.add_argument('--mute', action='store_true',
+                    help='Mute stdout')
+
 args = parser.parse_args()
+
+if args.mute:
+    import sys
+    import os
+    sys.stdout = open(os.devnull, 'w')
 
 import json
 
