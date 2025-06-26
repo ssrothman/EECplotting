@@ -3,9 +3,19 @@ import re
 import hist
 import pickle
 import os.path
+import os
 
 basedir = '/ceph/submit/data/group/cms/store/user/srothman/EEC/'
 unf_basedir = '/home/submit/srothman/work/EEC/EECunfold/data'
+
+def try_to_read_pkl(path):
+    try:
+        with open(path, 'rb') as f:
+            return pickle.load(f)
+    except Exception as e:
+        import sys
+        sys.stderr.write(f"\n\nError reading pickle file {path}: {e}\n\n")
+        raise e
 
 def check_skimpath(subpath):
     if not subpath.is_dir():
@@ -50,6 +60,11 @@ def check_histpath(subpath, whichobj, objsyst, wtsyst,
         return False
     if firstN <= 0 and 'first' in subpath.name:
         return False
+
+    if os.stat(subpath).st_size == 0:
+        #guard with lots of newlines to protect from tqdm
+        sys.stderr.write(f"\n\nWarning: {subpath.name} is empty, skipping\n\n")
+        return False 
 
     return True
 
@@ -124,13 +139,7 @@ def get_counts(runtag, tag):
         print()
 
     #print("The path is: %s" % thepath)
-
-    with open(thepath, 'rb') as f:
-        return pickle.load(f)['num_evt']
-
-def get_unfolded_histogram(name):
-    with open(os.path.join(unf_basedir, name+'.pkl'), 'rb') as f:
-        return pickle.load(f)
+    return try_to_read_pkl(thepath)['num_evt']
 
 def get_pickled_histogram(runtag, tag, skimmer, objsyst, wtsyst, whichobj,
                           statN, statK, 
@@ -166,8 +175,7 @@ def get_pickled_histogram(runtag, tag, skimmer, objsyst, wtsyst, whichobj,
 
     nomfile = os.path.join(thepath, maybe_chose_option(options, user_input=True))
 
-    with open(nomfile, 'rb') as f:
-        H = pickle.load(f)
+    H = try_to_read_pkl(nomfile)
 
     if type(H) in [list, tuple]:
         H = H[0]
@@ -197,10 +205,9 @@ def get_pickled_histogram(runtag, tag, skimmer, objsyst, wtsyst, whichobj,
             if verbose:
                 print("Found bootstrap file: %s" % subpath.name)
 
-            with open(os.path.join(thepath, subpath.name), 'rb') as f:
-                Hnext = pickle.load(f)
-                if type(Hnext) in [list, tuple]:
-                    Hnext = Hnext[0]
+            Hnext = try_to_read_pkl(os.path.join(thepath, subpath.name))
+            if type(Hnext) in [list, tuple]:
+                Hnext = Hnext[0]
 
             Nboot_so_far += Hnext.axes['bootstrap'].size
             Hboots.append(Hnext)
