@@ -10,10 +10,12 @@ parser.add_argument("what")
 
 parser.add_argument('--statN', type=int, default=-1)
 parser.add_argument('--statK', type=int, default=-1)
+parser.add_argument('--firstN', type=int, default=-1)
 
-parser.add_argument('--boot_per_file', type=int, default=-1)
-parser.add_argument('--reweight', type=str, default='Pythia_Zkinweight')
+parser.add_argument('--boot_per_file', type=int, default=[25, 500], nargs='+')
 parser.add_argument('--max_nboot', type=int, default=-1)
+
+parser.add_argument('--reweight', type=str, default=None)
 
 parser.add_argument('--outputtag', type=str, default='Pythia_HTsum')
 
@@ -33,24 +35,28 @@ H = datasets.get_pickled_histogram_sum(
         dsets, xsecs, args.Runtag, args.Skimmer,
         args.Objsyst, args.Wtsyst, args.what,
         statN=args.statN, statK=args.statK,
-        shuffle_boots=False,
+        firstN=args.firstN,
         boot_per_file=args.boot_per_file,
         reweight=args.reweight,
         max_nboot=args.max_nboot)
 
 import os
 outfile = '%s_%s_%s'%(args.what, args.Objsyst, args.Wtsyst)
+
 nboot = H.axes['bootstrap'].size - 1
 if nboot > 0:
     outfile += '_boot%d' % nboot
 if args.statN > 0:
     outfile += '_%dstat%d' % (args.statN, args.statK)
+if args.firstN > 0:
+    outfile += '_first%d' % args.firstN
 if args.reweight is not None:
     outfile += '_%s' % args.reweight
 outfile += "_HTSUM.pkl"
 
 output_path = os.path.join(datasets.basedir, args.Runtag, 
                            args.outputtag, args.Skimmer, 
+                           'hists_0to0', args.Objsyst,
                            outfile)
 os.makedirs(os.path.dirname(output_path), exist_ok=True)
 with open(output_path, 'wb') as f:
