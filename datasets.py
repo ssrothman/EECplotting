@@ -63,6 +63,7 @@ def check_histpath(subpath, whichobj, objsyst, wtsyst,
 
     if os.stat(subpath).st_size == 0:
         #guard with lots of newlines to protect from tqdm
+        import sys
         sys.stderr.write(f"\n\nWarning: {subpath.name} is empty, skipping\n\n")
         return False 
 
@@ -74,14 +75,27 @@ def maybe_chose_option(options, user_input=True):
     elif len(options) == 1:
         return options[0]
     else:
-        print()
-        print("Multiple options found:")
-        for i, option in enumerate(options):
-            print(f"{i}: {option}")
-        print()
-        choice = int(input("Please select a number: "))
-        return options[choice]
-        print()
+        if user_input:
+            print()
+            print("Multiple options found:")
+            for i, option in enumerate(options):
+                print(f"{i}: {option}")
+            print()
+            choice = int(input("Please select a number: "))
+            return options[choice]
+            print()
+        else:
+            import re
+            import numpy as np
+            nboots = []
+            for option in options:
+                m = re.search(r'_boot(\d+)', option)
+                if m:
+                    nboots.append(int(m.group(1)))
+                else:
+                    nboots.append(0)
+            best = np.argmax(nboots)
+            return options[best]
         
 def get_dataset(runtag, tag, skimmer, objsyst, whichobj):
     thepath = os.path.join(basedir, runtag, tag, skimmer)
@@ -141,7 +155,8 @@ def get_counts(runtag, tag):
     #print("The path is: %s" % thepath)
     return try_to_read_pkl(thepath)['num_evt']
 
-def get_pickled_histogram(runtag, tag, skimmer, objsyst, wtsyst, whichobj,
+def get_pickled_histogram(runtag, tag, skimmer,
+                          objsyst, wtsyst, whichobj,
                           statN, statK, 
                           boot_per_file, firstN,
                           reweight,
@@ -160,7 +175,7 @@ def get_pickled_histogram(runtag, tag, skimmer, objsyst, wtsyst, whichobj,
             options.append(subpath.name)
 
     thepath = os.path.join(thepath,
-                           maybe_chose_option(options, user_input=True),
+                           maybe_chose_option(options, user_input=False),
                            objsyst)
 
     subpaths = os.scandir(thepath)
@@ -173,7 +188,7 @@ def get_pickled_histogram(runtag, tag, skimmer, objsyst, wtsyst, whichobj,
                           reweight=reweight, boot_per_file=-1):
             options.append(subpath.name)
 
-    nomfile = os.path.join(thepath, maybe_chose_option(options, user_input=True))
+    nomfile = os.path.join(thepath, maybe_chose_option(options, user_input=False))
 
     H = try_to_read_pkl(nomfile)
 
