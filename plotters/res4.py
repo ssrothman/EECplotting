@@ -1,3 +1,5 @@
+import fasteigenpy as eigen
+from tqdm import tqdm
 import matplotlib.pyplot as plt
 import hist
 from matplotlib.colors import LogNorm, Normalize
@@ -1470,3 +1472,174 @@ def plot_named_pulls(res, data=False, isCMS=True,
             plt.show()
     finally:
         plt.close(fig)
+
+def chi2_1d(H1, H2):
+    nom1 = H1[{'bootstrap' : 0}].values(flow=True).ravel()
+    nom2 = H2[{'bootstrap' : 0}].values(flow=True).ravel()
+
+    vals1 = H1.values(flow=True).reshape((H1.axes['bootstrap'].size, -1))
+    vals2 = H2.values(flow=True).reshape((H2.axes['bootstrap'].size, -1))
+
+    sums1 = np.sum(vals1, axis=1)
+    sums2 = np.sum(vals2, axis=1)
+
+    vals1 = vals1 * sums1[0] / sums1[:, None]
+    vals2 = vals2 * sums2[0] / sums2[:, None]
+
+    vals1 = vals1[1:]
+    vals2 = vals2[1:]
+
+    var1 = vals1.T @ vals1
+    var2 = vals2.T @ vals2
+
+    vardiff = var1 + var2
+
+    errdiff = np.sqrt(np.diag(vardiff))
+
+    chi2 = np.sum(np.square(nom1 - nom2) / errdiff**2)
+    return chi2
+
+def chi2_2d(H1, H2):
+    nom1 = H1[{'bootstrap' : 0}].values(flow=True).ravel()
+    nom2 = H2[{'bootstrap' : 0}].values(flow=True).ravel()
+    err= nom2-nom1
+
+    vals1 = H1.values(flow=True).reshape((H1.axes['bootstrap'].size, -1))
+    vals2 = H2.values(flow=True).reshape((H2.axes['bootstrap'].size, -1))
+
+    sums1 = np.sum(vals1, axis=1)
+    sums2 = np.sum(vals2, axis=1)
+
+    vals1 = vals1 * sums1[0] / sums1[:, None]
+    vals2 = vals2 * sums2[0] / sums2[:, None]
+
+    vals1 = vals1[1:]
+    vals2 = vals2[1:]
+
+    var1 = (vals1.T @ vals1) / vals1.shape[0]
+    var2 = (vals2.T @ vals2) / vals2.shape[0]
+
+    vardiff = var1 + var2
+
+    #print("Computing LDLT...")
+    ldlt = eigen.LDLT(vardiff)
+    if ldlt.info() != eigen.ComputationInfo.Success:
+        raise RuntimeError("LDLT decomposition failed: %s" % ldlt.info())
+    chi2 = err @ ldlt.solve(err)
+    return chi2
+
+def covmat_trace(H, step=500, savefig=None):
+    vals = H.values(flow=True).reshape((H.axes['bootstrap'].size, -1))
+
+    sums = np.sum(vals, axis=1)
+    vals = vals * sums[0] / sums[:, None]
+
+    boots = vals[1:]
+    nom = vals[0]
+
+    DY = boots - nom[None, :]
+
+    accumulator = np.zeros((DY.shape[1], DY.shape[1]), dtype=DY.dtype)
+
+    traces = []
+    ends = []
+    for i in tqdm(range(0, DY.shape[0], step)):
+        end = min(i+step, DY.shape[0])
+        accumulator += DY[i:end].T @ DY[i:end]
+        traces.append(np.trace(accumulator) / end)
+        ends.append(end)
+
+    fig = plt.figure(figsize=config['Figure_Size'])
+    try:
+        ax = fig.add_subplot(111)
+        hep.cms.label(ax=ax, data=False, label=config['Approval_Text'], pad=0.05)
+
+        ax.plot(ends, traces, marker='o')
+        ax.set_xlabel('Bootstrap samples')
+        ax.set_ylabel('Covariance trace')
+
+        plt.tight_layout()
+
+        if savefig is not None:
+            plt.savefig(savefig + '_covmat_trace.png', dpi=300, format='png', bbox_inches='tight')
+            plt.clf()
+        else:
+            plt.show()
+    finally:
+        plt.close(fig)
+
+def squared_error_vs_Nboot(basepath, minboot, maxboot, bootstep, 
+                           num_lines=5, savefig=None):
+    import os
+    invcovs = []
+    covs = []
+    boots = []
+    for boot in range(minboot, maxboot+bootstep, bootstep):
+        print(boot)
+        invcovs.append(np.load(os.path.join(basepath.replace("REPLACEHERE", "boot%d"%boot), "INVCOV.npy")))
+        covs.append(np.load(os.path.join(basepath.replace("REPLACEHERE", "boot%d"%boot), "COV.npy")))
+        boots.append(boot)
+
+    np.random.seed(12)  # For reproducibility
+
+    fig = plt.figure(figsize=config['Figure_Size'])
+    try:
+        ax = fig.add_subplot(111)
+        hep.cms.label(ax=ax, data=False, label=config['Approval_Text'], pad=0.05)
+
+        for i in range(num_lines):
+            err = np.random.random(invcovs[0].shape[0])
+            vals = [err @ invcov @ err for invcov in invcovs]
+            ax.plot(boots, vals, marker='o')
+        ax.set_xlabel('Number of bootstrap samples')
+        ax.set_ylabel('Squared error')
+        ax.set_yscale('log')
+
+        plt.tight_layout()
+
+        if savefig is not None:
+            plt.savefig(savefig + '_squared_error_vs_Nboot.png', dpi=300, format='png', bbox_inches='tight')
+            plt.clf()
+        else:
+            plt.show()
+    finally:
+        plt.close(fig)
+
+    return covs, invcovs
+
+def eigenvals_vs_Nboot(basepath, minboot, maxboot, bootstep, savefig=None, clip_to_zero=1e-20):
+    import os
+    eigvals = []
+    boots = []
+    for boot in range(minboot, maxboot+bootstep, bootstep):
+        print(boot)
+        eigvals.append(np.load(os.path.join(basepath.replace("REPLACEHERE", "boot%d"%boot), "COV_EIGVALS.npy")))
+        boots.append(boot)
+
+    for i in range(len(eigvals)):
+        eigvals[i][eigvals[i] < clip_to_zero] = 0
+
+    fig = plt.figure(figsize=config['Figure_Size'])
+    try:
+        ax = fig.add_subplot(111)
+        hep.cms.label(ax=ax, data=False, label=config['Approval_Text'], pad=0.05)
+
+        for i, boot in enumerate(boots):
+            ax.plot(np.arange(len(eigvals[i])), np.flip(eigvals[i]), marker='o', label=f'Boot {boot}')
+
+        ax.set_yscale('log')
+        ax.set_xlabel('Eigenvalue index')
+        ax.set_ylabel('Eigenvalue')
+        ax.legend()
+
+        plt.tight_layout()
+
+        if savefig is not None:
+            plt.savefig(savefig + '_eigenvals_vs_Nboot.png', dpi=300, format='png', bbox_inches='tight')
+            plt.clf()
+        else:
+            plt.show()
+    finally:
+        plt.close(fig)
+
+    return eigvals
