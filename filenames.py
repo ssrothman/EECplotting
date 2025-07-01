@@ -34,9 +34,10 @@ def parse_loss_name(name):
     if m:
         syst_l = m.group(0).split('-')[1:]
     testcut = '_TESTCUT' in name
-    return tag, sample, nboot, statN, statK, firstN, syst_l, testcut
+    smoothed = '_SMOOTHED' in name
+    return tag, sample, nboot, statN, statK, firstN, syst_l, testcut, smoothed
 
-def loss_name(tag, sample, nboot, statN, statK, firstN, syst_l, testcut):
+def loss_name(tag, sample, nboot, statN, statK, firstN, syst_l, testcut, smoothed):
     if nboot < 0:
         options = os.listdir(os.path.join(datasets.basedir, tag, sample, 'EECres4tee', 'CONSTRUCTED_LOSSES'))
         options = list(filter(lambda x: x.startswith(f'{tag}_{sample}_'), options))
@@ -53,8 +54,10 @@ def loss_name(tag, sample, nboot, statN, statK, firstN, syst_l, testcut):
             options = list(filter(lambda x: syststr in x, options))
         if testcut:
             options = list(filter(lambda x: '_TESTCUT' in x, options))
+        if smoothed:
+            options = list(filter(lambda x: '_SMOOTHED' in x, options))
         if len(options) == 0:
-            raise ValueError(f"No options found for tag {tag}, sample {sample}, firstN {firstN}, syst_l {syst_l}, testcut {testcut}.")
+            raise ValueError(f"No options found for tag {tag}, sample {sample}, firstN {firstN}, syst_l {syst_l}, testcut {testcut}, smoothed {smoothed}.")
         elif len(options) > 1:
             print("Warning: multiple options for nboot found for loss:")
             nboot_options = []
@@ -86,10 +89,12 @@ def loss_name(tag, sample, nboot, statN, statK, firstN, syst_l, testcut):
             name += f'-{syst}'
     if testcut:
         name += '_TESTCUT'
+    if smoothed:
+        name += '_SMOOTHED'
     return name
 
-def loss_folder(tag, sample, nboot, statN, statK, firstN, syst_l, testcut):
-    name = loss_name(tag, sample, nboot, statN, statK, firstN, syst_l, testcut)
+def loss_folder(tag, sample, nboot, statN, statK, firstN, syst_l, testcut, smoothed):
+    name = loss_name(tag, sample, nboot, statN, statK, firstN, syst_l, testcut, smoothed)
 
     path = os.path.join(
         datasets.basedir, tag, sample,
