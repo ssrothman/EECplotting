@@ -2,6 +2,26 @@ import datasets
 import re
 import os
 
+def run_folder(reco_tag, reco_sample, reco_nboot, 
+               reco_statN, reco_statK, reco_firstN, 
+               reco_objsyst, reco_wtsyst, 
+               gen_tag, gen_sample, 
+               gen_nboot, gen_statN, gen_statK, gen_firstN, 
+               syst_l, testcut, smoothed,
+               runcode):
+    recofolder = reco_folder(
+        reco_tag, reco_sample, reco_nboot,
+        reco_statN, reco_statK, reco_firstN,
+        reco_objsyst, reco_wtsyst, testcut
+    )
+    lossname = loss_name(
+        gen_tag, gen_sample, gen_nboot,
+        gen_statN, gen_statK, gen_firstN,
+        syst_l, testcut, smoothed
+    )
+    runfolder = os.path.join(recofolder, lossname, runcode)
+    return runfolder
+
 def parse_loss_name(name):
     splitted = name.split('_')
     tag = '_'.join(splitted[:3])
