@@ -13,6 +13,26 @@
     "axis_labels": {
         "Zpt" : "$p_{T}^{Z}$ [GeV]",
         "Zy" : "$y^{Z}$",
-        "Zmass" : "$m_{Z}$ [GeV]"
-    }
+        "Zmass" : "$m_{Z}$ [GeV]",
+        "genHT" : "$H_{T}^{gen}$ [GeV]",
+        "nTrueInt" : "$N_{vtx}^{true}$",
+        "nPV" : "$N_{vtx}^{reco}$",
+        "rho" : "$\\rho$",
+        "MET" : "$E_{T}^{miss}$ [GeV]",
+        "numLooseB" : "$N_{b}^{loose}$",
+        "numMediumB" : "$N_{b}^{medium}$",
+        "numTightB" : "$N_{b}^{tight}$",
+        "numJets" : "$N_{jets}$",
+        "leadMuPt" : "$p_{T}^{\\mu_{lead}}$ [GeV]",
+        "leadMuEta" : "$\\eta^{\\mu_{lead}}$",
+        "leadMuCharge" : "$Q^{\\mu_{lead}}$",
+        "subMuPt" : "$p_{T}^{\\mu_{sublead}}$ [GeV]",
+        "subMuEta" : "$\\eta^{\\mu_{sublead}}$",
+        "subMuCharge" : "$Q^{\\mu_{sublead}}$"
+    },
+    "auto_logx_patterns" : [
+        "*pt",
+        "MET",
+        "*HT"
+    ]
 }
