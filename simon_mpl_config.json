@@ -1,0 +1,18 @@
+{
+    "figsize": [12, 10],
+    "cms_label" : "Work in Progress",
+    "ratiopad" : {
+        "height" : 0.5,
+        "hspace" : 0.0,
+        "auto_ylim" : {
+            "padding" : 0.15,
+            "percentile" : 0.99,
+            "min_threshold" : 0.2
+        }
+    },
+    "axis_labels": {
+        "Zpt" : "$p_{T}^{Z}$ [GeV]",
+        "Zy" : "$y^{Z}$",
+        "Zmass" : "$m_{Z}$ [GeV]"
+    }
+}

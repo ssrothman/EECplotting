@@ -10,8 +10,6 @@ import pyarrow as pa
 import json
 from datasets import get_dataset, get_procpkl
 
-from histplot import simon_histplot, simon_histplot_ratio, simon_histplot_rate
-
 plt.style.use(hep.style.CMS)
 
 with open("config/config.json", 'r') as f:

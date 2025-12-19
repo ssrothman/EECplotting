@@ -4,6 +4,7 @@ import hist
 import pickle
 import os.path
 import os
+from typing import Dict
 
 basedir = '/ceph/submit/data/group/cms/store/user/srothman/EEC/'
 unf_basedir = '/home/submit/srothman/work/EEC/EECunfold/data'
@@ -199,7 +200,7 @@ def get_pickled_histogram(runtag, tag, skimmer,
 
     subpaths = list(os.scandir(thepath))
     #first chose which boot_per_file to use
-    lens= {boot : 0 for boot in boot_per_file}
+    lens : Dict[int,int] = {boot : 0 for boot in boot_per_file}
     for bootcheck in boot_per_file:
         for subpath in subpaths:
             if check_histpath(subpath, whichobj, objsyst, wtsyst, 
